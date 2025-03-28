@@ -17,7 +17,6 @@ https://www.quora.com/
 https://css-tricks.com/snippets/css/a-guide-to-flexbox/
 https://www.nationalgeographic.com/animals/mammals/facts/domestic-cat
 https://github.com/
-https://github.com/amir-kedis
 https://react.dev/
 https://www.w3schools.com
 https://www.amazon.com/

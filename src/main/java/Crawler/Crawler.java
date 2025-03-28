@@ -8,8 +8,8 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
 public class Crawler {
-    private Queue<String> urlsToCrawl = new LinkedList<>(); // Use Queue for BFS crawling
-    private Set<String> visited = new HashSet<>();
+    private final Queue<String> urlsToCrawl = new LinkedList<>(); // Use Queue for BFS crawling
+    private final Set<String> visited = new HashSet<>();
 
     public Crawler(String filename) {
         readStartLinks(filename);
