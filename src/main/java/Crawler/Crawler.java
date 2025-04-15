@@ -9,13 +9,15 @@ import org.jsoup.select.Elements;
 import java.net.URI;
 import java.util.stream.Collectors;
 
+import Crawler.RobotsManager;
 public class Crawler {
     private final Queue<String> urlsToCrawl = new LinkedList<>(); // Use Queue for BFS crawling
     private final Set<String> visited = new HashSet<>();
-
+    RobotsManager RobotsM;
     public Crawler(String filename) {
         readStartLinks(filename);
         crawl();
+        RobotsM = new RobotsManager();
     }
     private static String normalizeUrl(String url, String baseUrl) throws Exception{
 
@@ -61,7 +63,15 @@ public class Crawler {
         try (BufferedReader br = new BufferedReader(new FileReader(fileName))) { // Try-with-resources
             String line;
             while ((line = br.readLine()) != null) {
-                urlsToCrawl.add(line); // Use offer() for queue
+
+                try{
+                    line=normalizeUrl(line,null);
+                    RobotsM.parseRobots(line);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+
+                urlsToCrawl.add(line); // add to the queue
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -86,15 +96,15 @@ public class Crawler {
                 for (Element link : links) {
 
                     String newUrl = link.absUrl("href"); // Convert relative URLs to absolute URLs
+                    try{
+                        newUrl=normalizeUrl(newUrl,url);
+                        RobotsM.parseRobots(newUrl);
+                    }catch (Exception e){
+                        System.err.println("Failed to normalize : " + url);
+                    }
 
-                    if (!visited.contains(newUrl) && !newUrl.isEmpty() && newUrl.startsWith("https")) {
+                    if (!visited.contains(newUrl) && !newUrl.isEmpty()) {
                         System.out.println("Found: " + newUrl);
-                        try{
-                            normalizeUrl(newUrl,url);
-                        }catch (Exception e){
-                            System.err.println("Failed to normalize : " + url);
-                        }
-
                         urlsToCrawl.add(newUrl); // Add to queue for further crawling
                     }
                 }
