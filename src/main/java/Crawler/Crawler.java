@@ -13,11 +13,10 @@ import Crawler.RobotsManager;
 public class Crawler {
     private final Queue<String> urlsToCrawl = new LinkedList<>(); // Use Queue for BFS crawling
     private final Set<String> visited = new HashSet<>();
-    RobotsManager RobotsM;
+    RobotsManager RobotsM = new RobotsManager();
     public Crawler(String filename) {
         readStartLinks(filename);
         crawl();
-        RobotsM = new RobotsManager();
     }
     private static String normalizeUrl(String url, String baseUrl) throws Exception{
 
