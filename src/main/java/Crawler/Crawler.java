@@ -6,6 +6,8 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+import java.net.URI;
+import java.util.stream.Collectors;
 
 public class Crawler {
     private final Queue<String> urlsToCrawl = new LinkedList<>(); // Use Queue for BFS crawling
@@ -14,6 +16,45 @@ public class Crawler {
     public Crawler(String filename) {
         readStartLinks(filename);
         crawl();
+    }
+    private static String normalizeUrl(String url, String baseUrl) throws Exception{
+
+        // Step 1: Resolve relative URL (if needed)
+        if (!url.startsWith("http")) {
+            Document doc = Jsoup.parse("<a href=\"" + url + "\"></a>", baseUrl);
+            url = doc.select("a").first().absUrl("href");
+        }
+
+        // Step 2: Parse and normalize path
+        URI uri = new URI(url).normalize();
+
+        // Step 3: Lowercase scheme and host
+        String scheme = uri.getScheme().toLowerCase();
+        String host = uri.getHost().toLowerCase();
+
+        // Step 4: Remove default ports
+        int port = uri.getPort();
+        if ((port == 80 && "http".equals(scheme)) || (port == 443 && "https".equals(scheme))) {
+            port = -1;
+        }
+
+        // Step 5: Handle query parameters (example: remove "session")
+        String query = uri.getQuery();
+        String newQuery = query;
+        if (query != null) {
+            Map<String, String> params = Arrays.stream(query.split("&"))
+                    .map(p -> p.split("="))
+                    .filter(p -> !p[0].equals("session"))
+                    .collect(Collectors.toMap(p -> p[0], p -> p[1]));
+            newQuery = params.entrySet().stream()
+                    .map(e -> e.getKey() + "=" + e.getValue())
+                    .collect(Collectors.joining("&"));
+            if (newQuery.isEmpty()) newQuery = null;
+        }
+
+        // Step 6: Remove fragment and rebuild
+        return new URI(scheme, host, uri.getPath(), newQuery, null).toString();
+
     }
 
     private void readStartLinks(String fileName) {
@@ -39,14 +80,21 @@ public class Crawler {
             visited.add(url); // Mark as visited
 
             try {
-                Document doc = Jsoup.connect(url).get();
+                Document doc = Jsoup.connect(url).get(); //  returned as HTML
                 Elements links = doc.select("a[href]"); // Select all anchor tags with href attribute
 
                 for (Element link : links) {
+
                     String newUrl = link.absUrl("href"); // Convert relative URLs to absolute URLs
 
                     if (!visited.contains(newUrl) && !newUrl.isEmpty() && newUrl.startsWith("https")) {
                         System.out.println("Found: " + newUrl);
+                        try{
+                            normalizeUrl(newUrl,url);
+                        }catch (Exception e){
+                            System.err.println("Failed to normalize : " + url);
+                        }
+
                         urlsToCrawl.add(newUrl); // Add to queue for further crawling
                     }
                 }
