@@ -7,18 +7,33 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import java.net.URI;
-import java.util.stream.Collectors;
 
-import Crawler.RobotsManager;
+import java.util.stream.Collectors;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
 public class Crawler {
-    private final Queue<String> urlsToCrawl = new LinkedList<>(); // Use Queue for BFS crawling
-    private final Set<String> visited = new HashSet<>();
-    RobotsManager RobotsM = new RobotsManager();
+    protected final ConcurrentLinkedQueue<String> urlsToCrawl = new ConcurrentLinkedQueue<>(); // Use Queue for BFS
+    protected static final Set<String> visited = ConcurrentHashMap.<String>newKeySet();
+    RobotsManager RobotsM;
+    ExecutorService executor;
+    int numThreads = 8;
+
     public Crawler(String filename) {
+        RobotsM = new RobotsManager();
         readStartLinks(filename);
+        executor = Executors.newFixedThreadPool(numThreads); // thread pool
         crawl();
+
     }
-    private static String normalizeUrl(String url, String baseUrl) throws Exception{
+
+    public Crawler() {
+    }
+
+    protected static String normalizeUrl(String url, String baseUrl) throws Exception {
 
         // Step 1: Resolve relative URL (if needed)
         if (!url.startsWith("http")) {
@@ -50,7 +65,8 @@ public class Crawler {
             newQuery = params.entrySet().stream()
                     .map(e -> e.getKey() + "=" + e.getValue())
                     .collect(Collectors.joining("&"));
-            if (newQuery.isEmpty()) newQuery = null;
+            if (newQuery.isEmpty())
+                newQuery = null;
         }
 
         // Step 6: Remove fragment and rebuild
@@ -63,8 +79,8 @@ public class Crawler {
             String line;
             while ((line = br.readLine()) != null) {
 
-                try{
-                    line=normalizeUrl(line,null);
+                try {
+                    line = normalizeUrl(line, null);
                     RobotsM.parseRobots(line);
                 } catch (Exception e) {
                     throw new RuntimeException(e);
@@ -78,38 +94,10 @@ public class Crawler {
     }
 
     private void crawl() {
-        while (!urlsToCrawl.isEmpty()) { // Keep crawling while there are URLs in queue
-            String url = urlsToCrawl.poll(); // Get and remove the first URL
 
-            if (url == null || visited.contains(url)) {
-                continue; // Skip if URL is null or already visited
-            }
-
-            System.out.println("Crawling: " + url);
-            visited.add(url); // Mark as visited
-
-            try {
-                Document doc = Jsoup.connect(url).get(); //  returned as HTML
-                Elements links = doc.select("a[href]"); // Select all anchor tags with href attribute
-
-                for (Element link : links) {
-
-                    String newUrl = link.absUrl("href"); // Convert relative URLs to absolute URLs
-                    try{
-                        newUrl=normalizeUrl(newUrl,url);
-                        RobotsM.parseRobots(newUrl);
-                    }catch (Exception e){
-                        System.err.println("Failed to normalize : " + url);
-                    }
-
-                    if (!visited.contains(newUrl) && !newUrl.isEmpty()) {
-                        System.out.println("Found: " + newUrl);
-                        urlsToCrawl.add(newUrl); // Add to queue for further crawling
-                    }
-                }
-            } catch (IOException e) {
-                System.err.println("Failed to fetch: " + url);
-            }
+        for (int i = 0; i < numThreads; i++) {
+            executor.submit(new CrawlerWorker());
         }
     }
+
 }
