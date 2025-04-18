@@ -1,12 +1,10 @@
 package Crawler;
 
 import java.io.*;
-import java.util.*;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
-import java.net.URI;
 
 public class CrawlerWorker
     extends Crawler implements Runnable {
@@ -17,7 +15,10 @@ public class CrawlerWorker
 
   @Override
   public void run() {
+    System.out.println("Queue size: " + urlsToCrawl.size());
     while (!urlsToCrawl.isEmpty()) {
+
+      System.out.println("Queue size: " + urlsToCrawl.size());
 
       String url = urlsToCrawl.poll();
 
@@ -26,7 +27,12 @@ public class CrawlerWorker
       }
 
       System.out.println("Crawling: " + url);
-      visited.add(url); // Mark as visited
+      if (!RobotsM.canCrawl(url)) {
+        // Optionally log to MongoDB: { url: url, reason: "Disallowed" }
+        System.out.println("Blocked by robots.txt: " + url);
+        continue;
+      }
+      // visited.add(url); // Mark as visited
 
       try {
         Document doc = Jsoup.connect(url).get(); // returned as HTML
@@ -38,15 +44,18 @@ public class CrawlerWorker
 
           try {
             newUrl = normalizeUrl(newUrl, url);
-            RobotsM.parseRobots(newUrl);
+            if (newUrl != null && !newUrl.isEmpty() && !visited.contains(newUrl) && RobotsM.canCrawl(newUrl)) {
+              urlsToCrawl.add(newUrl); // Add to queue for BFS
+              visited.add(newUrl); // Mark as visited
+              System.out.println("Added to queue: " + newUrl);
+            } else {
+              System.out.println("Skipped: " + newUrl);
+            }
+
           } catch (Exception e) {
-            System.err.println("Failed to normalize : " + url);
+            System.out.println("Invalid URL: " + newUrl);
           }
 
-          if (!visited.contains(newUrl) && !newUrl.isEmpty()) {
-            System.out.println("Found: " + newUrl);
-            urlsToCrawl.add(newUrl); // Add to queue for further crawling
-          }
         }
       } catch (IOException e) {
         System.err.println("Failed to fetch: " + url);

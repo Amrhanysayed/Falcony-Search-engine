@@ -4,8 +4,7 @@ import java.io.*;
 import java.util.*;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
+
 import java.net.URI;
 
 import java.util.stream.Collectors;
@@ -22,15 +21,17 @@ public class Crawler {
     ExecutorService executor;
     int numThreads = 8;
 
-    public Crawler(String filename) {
-        RobotsM = new RobotsManager();
-        readStartLinks(filename);
-        executor = Executors.newFixedThreadPool(numThreads); // thread pool
-        crawl();
+    public Crawler() {
 
     }
 
-    public Crawler() {
+    public void startCrawl(String fileName) throws Exception {
+
+        this.RobotsM = new RobotsManager(); // Initialize RobotsManager
+        this.executor = Executors.newFixedThreadPool(numThreads); // Initialize thread poo
+        readStartLinks(fileName); // Read seed URLs from file
+
+        crawl(); // Start crawling
     }
 
     protected static String normalizeUrl(String url, String baseUrl) throws Exception {
@@ -80,23 +81,38 @@ public class Crawler {
             while ((line = br.readLine()) != null) {
 
                 try {
-                    line = normalizeUrl(line, null);
-                    RobotsM.parseRobots(line);
+                    String normalized = normalizeUrl(line, null);
+                    if (normalized != null && !normalized.isEmpty()) {
+                        RobotsM.parseRobots(normalized); // Pre-fetch robots.txt
+                        urlsToCrawl.add(normalized);
+                    }
                 } catch (Exception e) {
-                    throw new RuntimeException(e);
+                    System.err.println("Failed to normalize seed URL: " + line + " - " + e.getMessage());
                 }
-
-                urlsToCrawl.add(line); // add to the queue
             }
         } catch (IOException e) {
             e.printStackTrace();
+        } finally {
+            System.out.println("Seed URLs loaded: " + urlsToCrawl.size());
         }
     }
 
     private void crawl() {
-
+        System.out.println("Starting crawl with " + numThreads + " threads...");
         for (int i = 0; i < numThreads; i++) {
+            System.out.println("Submitting worker " + i);
             executor.submit(new CrawlerWorker());
+        }
+        executor.shutdown();
+
+        try {
+            if (!executor.awaitTermination(1, TimeUnit.HOURS)) {
+                executor.shutdownNow();
+                System.err.println("Crawl timed out after 1 hour");
+            }
+        } catch (InterruptedException e) {
+            executor.shutdownNow();
+            System.err.println("Crawl interrupted: " + e.getMessage());
         }
     }
 
