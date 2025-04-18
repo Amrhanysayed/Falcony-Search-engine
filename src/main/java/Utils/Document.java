@@ -1,5 +1,7 @@
 package Utils;
 
+import org.jsoup.Jsoup;
+
 public class Document {
     int docId;
     public String url, title, content;
@@ -8,7 +10,8 @@ public class Document {
         this.docId = docId;
         this.url = url;
         this.title = title;
-        this.content = content;
+        this.content = Jsoup.parse(content).text().replaceAll("\\s+", " ").trim();
+        //System.out.println(this.content);
     }
     public int getId() {
         return docId;
