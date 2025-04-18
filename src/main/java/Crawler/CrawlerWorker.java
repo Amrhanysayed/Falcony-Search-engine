@@ -1,64 +1,70 @@
 package Crawler;
 
-import java.io.*;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+import java.io.IOException;
+import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 
-public class CrawlerWorker
-    extends Crawler implements Runnable {
+public class CrawlerWorker implements Runnable {
+  private final ConcurrentLinkedQueue<String> urlsToCrawl;
+  private final Set<String> visited;
+  private final AtomicInteger pageCount;
+  private final int maxPages;
+  private final RobotsManager robotsM;
+  public CrawlerWorker(ConcurrentLinkedQueue<String> urlsToCrawl, Set<String> visited, AtomicInteger pageCount, int maxPages, RobotsManager robotsM) {
+    this.urlsToCrawl = urlsToCrawl;
+    this.visited = visited;
+    this.pageCount = pageCount;
+    this.maxPages = maxPages;
+    this.robotsM = robotsM;
 
-  public CrawlerWorker() {
-    super();
   }
 
   @Override
   public void run() {
-    System.out.println("Queue size: " + urlsToCrawl.size());
-    while (!urlsToCrawl.isEmpty()) {
-
-      System.out.println("Queue size: " + urlsToCrawl.size());
-
+    while (!urlsToCrawl.isEmpty() && pageCount.get() < maxPages) {
       String url = urlsToCrawl.poll();
-
-      if (url == null || visited.contains(url)) {
+      if (url == null || !visited.add(url)) {
         continue;
       }
 
-      System.out.println("Crawling: " + url);
-      if (!RobotsM.canCrawl(url)) {
-        // Optionally log to MongoDB: { url: url, reason: "Disallowed" }
+      if (!robotsM.canCrawl(url)) {
         System.out.println("Blocked by robots.txt: " + url);
         continue;
       }
-      // visited.add(url); // Mark as visited
 
       try {
-        Document doc = Jsoup.connect(url).get(); // returned as HTML
+        Document doc = Jsoup.connect(url).timeout(5000).get();
+
+//        System.out.println("Crawling: " + url);
+
+        if (pageCount.incrementAndGet() >= maxPages) {
+          urlsToCrawl.clear();
+          break;
+        }
+
         Elements links = doc.select("a[href]");
-
         for (Element link : links) {
-
-          String newUrl = link.absUrl("href"); // Get absolute URL
-
+          String newUrl = link.absUrl("href");
           try {
-            newUrl = normalizeUrl(newUrl, url);
-            if (newUrl != null && !newUrl.isEmpty() && !visited.contains(newUrl) && RobotsM.canCrawl(newUrl)) {
-              urlsToCrawl.add(newUrl); // Add to queue for BFS
-              visited.add(newUrl); // Mark as visited
-              System.out.println("Added to queue: " + newUrl);
-            } else {
-              System.out.println("Skipped: " + newUrl);
+            String normalized = Crawler.normalizeUrl(newUrl, url);
+            if (normalized != null &&
+                    !normalized.isEmpty() &&
+                    !visited.contains(normalized) &&
+                    robotsM.canCrawl(normalized)) {
+              System.out.println("Found: " + normalized);
+              urlsToCrawl.add(normalized);
             }
-
           } catch (Exception e) {
-            System.out.println("Invalid URL: " + newUrl);
+            System.err.println("Failed to normalize URL: " + newUrl + " - " + e.getMessage());
           }
-
         }
       } catch (IOException e) {
-        System.err.println("Failed to fetch: " + url);
+        System.err.println("Failed to fetch: " + url + " - " + e.getMessage());
       }
     }
   }

@@ -4,10 +4,9 @@ public class Main {
     public static void main(String[] args) {
         String fileName = "src/seed.txt";
 
-        // Create Crawler instance
-        Crawler cr = new Crawler(); // No auto-crawling
+
+        Crawler cr = new Crawler();
         try {
-            // Start crawling and wait for completion
             cr.startCrawl(fileName);
             System.out.println("Finished crawling.");
         } catch (Exception e) {
