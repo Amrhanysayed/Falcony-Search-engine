@@ -9,6 +9,7 @@ import org.bson.Document;
 import org.bson.types.ObjectId;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -92,7 +93,7 @@ public class dbManager {
     }
 
     // Insert token into the tokens collection
-    public void insertToken(String token, int docId, int frequency, List<Integer> positions) {
+    public void insertToken(String token, String docId, int frequency, List<Integer> positions) {
         try {
             Document docInfo = new Document("docId", docId)
                     .append("frequency", frequency)
@@ -118,5 +119,13 @@ public class dbManager {
             mongoClient.close();
             System.out.println("MongoDB connection closed.");
         }
+    }
+
+    public static void main(String[] args) {
+        dbManager DBM = new dbManager();
+        DBM.insertToken("anas", "123", 11, new ArrayList<>(Arrays.asList(1,2,50,5)));
+        DBM.insertToken("anas", "1234", 11, new ArrayList<>(Arrays.asList(1,21,50,5)));
+        DBM.insertToken("anas2", "1234", 11, new ArrayList<>(Arrays.asList(1,2,3,4)));
+        DBM.close();
     }
 }
