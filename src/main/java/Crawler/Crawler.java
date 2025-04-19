@@ -18,8 +18,6 @@ import java.util.Map;
 import java.util.Arrays;
 import java.util.stream.Collectors;
 
-import dbManager.dbManager;
-
 public class Crawler {
     private final ConcurrentLinkedQueue<String> urlsToCrawl = new ConcurrentLinkedQueue<>();
     private final Set<String> visited = ConcurrentHashMap.newKeySet();
@@ -28,9 +26,8 @@ public class Crawler {
     private final RobotsManager robotsM;
     private final ExecutorService executor;
     private final int numThreads = 8;
-    private final dbManager mongo ;
+
     public Crawler() {
-        mongo =  new dbManager();
         this.robotsM = new RobotsManager();
         executor = Executors.newFixedThreadPool(numThreads);
     }
@@ -89,7 +86,7 @@ public class Crawler {
 
     private void crawl() {
         for (int i = 0; i < numThreads; i++) {
-            executor.submit(new CrawlerWorker(urlsToCrawl, visited, pageCount, maxPages, robotsM,mongo));
+            executor.submit(new CrawlerWorker(urlsToCrawl, visited, pageCount, maxPages, robotsM));
         }
         executor.shutdown();
         try {
