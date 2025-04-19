@@ -1,12 +1,12 @@
 package Indexer;
 
-import Utils.Document;
+import Utils.WebDocument;
 import opennlp.tools.tokenize.TokenizerME;
 
 public class IndexerWorker implements Runnable {
-    Document document;
+    WebDocument document;
     TokenizerME tokenizer;
-    public IndexerWorker(Document document, Tokenizer tokenizer) {
+    public IndexerWorker(WebDocument document, Tokenizer tokenizer) {
         this.document = document;
         this.tokenizer = tokenizer.getTokenizerME();
     }

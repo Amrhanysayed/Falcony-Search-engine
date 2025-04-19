@@ -1,12 +1,10 @@
 package Utils;
 
-import org.jsoup.Jsoup;
-
-public class Document {
+public class WebDocument {
     int docId;
     public String url, title, html, content;
 
-    public Document(int docId, String url, String title, String content) {
+    public WebDocument(int docId, String url, String title, String content) {
         this.docId = docId;
         this.url = url;
         this.title = title;
