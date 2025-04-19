@@ -15,6 +15,9 @@ dependencies {
     implementation 'org.jsoup:jsoup:1.15.3'
     implementation 'org.apache.opennlp:opennlp-tools:2.3.2'
     implementation 'org.slf4j:slf4j-simple:2.0.16'
+    implementation 'org.mongodb:mongodb-driver-sync:4.11.0'
+    implementation 'io.github.cdimascio:dotenv-java:2.3.0'
+    implementation 'org.mongodb:mongodb-driver-sync:4.11.0'
 }
 
 test {
