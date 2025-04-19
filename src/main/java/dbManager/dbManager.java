@@ -34,6 +34,8 @@ public class dbManager {
     }
 
     // Insert a document
+    // crawler
+    ///  TODO: url, doc
     public void insertDocument(String url, String title, String content) {
         Document doc = new Document("url", url)
                 .append("title", title)
