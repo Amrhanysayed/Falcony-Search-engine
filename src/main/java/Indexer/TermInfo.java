@@ -6,13 +6,13 @@ import java.util.List;
 public class TermInfo {
     String term;
     int frequency;
-    private final List<Integer> positions;
+    private List<Integer> positions;
     int docId;
 
-    TermInfo(String term, int frequency, int docId) {
+    TermInfo(String term, int frequency, int docId, List<Integer> positions) {
         this.term = term;
         this.frequency = frequency;
-        this.positions = new ArrayList<>();
+        this.positions = positions;
         this.docId = docId;
     }
 
@@ -24,5 +24,13 @@ public class TermInfo {
     }
     public int getFrequency() {
         return frequency;
+    }
+    public int getDocId() {
+        return docId;
+    }
+    public void setTermInfo(TermInfo tInfo) {
+        this.term = tInfo.term;
+        this.frequency = tInfo.frequency;
+        this.positions = tInfo.positions;
     }
 }

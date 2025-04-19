@@ -38,6 +38,8 @@ public class Indexer {
 
         PorterStemmer stemmer = new PorterStemmer();
 
+        Map<String, List<Integer>> positions = new HashMap<>();
+        int lastPosition = 0;
         for (String token : tokens) {
             // Clean token using regex
             // TODO: check this regex
@@ -51,14 +53,26 @@ public class Indexer {
             String stemmed = stemmer.stem(cleaned);
 
             termFreq.put(stemmed, termFreq.getOrDefault(stemmed, 0) + 1);
+            positions.computeIfAbsent(stemmed, k -> new ArrayList<>()).add(lastPosition++);
         }
 
         // Update inverted index
         for (Map.Entry<String, Integer> entry : termFreq.entrySet()) {
             String term = entry.getKey();
             int freq = entry.getValue();
-            TermInfo tInfo = new TermInfo(term, freq, document.getId());
-            invertedIndex.computeIfAbsent(term, k -> new ArrayList<>()).add(tInfo);
+            TermInfo tInfo = new TermInfo(term, freq, document.getId(), positions.computeIfAbsent(term, k -> new ArrayList<>()));
+            invertedIndex.computeIfAbsent(term, k -> new ArrayList<>());
+            boolean dup = false;
+            for (TermInfo termInfo : invertedIndex.get(term)) {
+                if(termInfo.getDocId() == document.getId()) {
+                    termInfo.setTermInfo(tInfo);
+                    dup = true;
+                    break;
+                }
+            }
+            if(!dup) {
+                invertedIndex.get(term).add(tInfo);
+            }
         }
     }
 
@@ -93,6 +107,7 @@ public class Indexer {
             System.out.println("Term: " + entry.getKey());
             for (TermInfo p : entry.getValue()) {
                 System.out.println("  DocID: " + p.docId + ", Freq: " + p.getFrequency());
+                System.out.println("  Pos: " + p.getPositions());
             }
         }
     }
@@ -100,7 +115,7 @@ public class Indexer {
     public static void main(String[] args) throws Exception {
         Indexer indexer = new Indexer();
         unindexedDocs.put(1, new Document(1, "http://example.com", "Introduction to Java Programming",
-                "<html><body>Java is a versatile programming language used for web and mobile apps. Learn Java basics today!</body></html>"));
+                "<html><body>Java Java is a versatile Java programming language used for web and mobile apps. Learn Java basics today!</body></html>"));
         unindexedDocs.put(2, new Document(2, "http://techblog.com", "Building Search Engines",
                 "<html><body>Search engines like Google use crawlers and indexers to rank pages. Java is great for such systems.</body></html>"));
         unindexedDocs.put(3, new Document(3, "http://codinghub.com", "Python vs Java",
