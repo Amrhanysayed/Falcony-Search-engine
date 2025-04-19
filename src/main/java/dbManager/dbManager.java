@@ -37,14 +37,26 @@ public class dbManager {
     // crawler
     ///  TODO: url, doc
     public void insertDocument(String url, String title, String content) {
+
         Document doc = new Document("url", url)
-                .append("title", title)
-                .append("content", content)
+                .append("title", title.trim())
+                .append("content", content.trim())
                 .append("timestamp", System.currentTimeMillis())
-                .append("indexed", false);  // Ensure documents are indexed as false initially
+                .append("indexed", false);
 
         collection.insertOne(doc);
         System.out.println("Document inserted: " + title);
+    }
+
+    public void insertDocuments(List<Document> documents) {
+        try {
+            if (!documents.isEmpty()) {
+                collection.insertMany(documents);
+                System.out.println("Inserted " + documents.size() + " documents");
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to insert documents: " + e.getMessage());
+        }
     }
 
     // Search documents by keyword
