@@ -31,8 +31,9 @@ public class Indexer {
 
     public static void indexDocument(Document document, TokenizerME tokenizer) {
         indexedDocuments.put(document.getId(), document);
+        String soup = Jsoup.parse(document.content).text().replaceAll("\\s+", " ").trim();
+        String[] tokens = tokenizer.tokenize(soup);
 
-        String[] tokens = tokenizer.tokenize(document.content);
 
         Map<String, Integer> termFreq = new HashMap<>();
 
