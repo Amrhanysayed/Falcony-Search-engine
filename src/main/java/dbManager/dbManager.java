@@ -179,7 +179,7 @@ public class dbManager {
     }
 
     //
-    public List<WebDocument> getDocsForTokens(List<String> tokens) {
+    public List<WebDocument> getDocsForTokens(List<String> tokens, boolean intersect) {
         try {
             // Use a Set to ensure unique docIds
             Set<String> docIdSet = new HashSet<>();
@@ -192,10 +192,12 @@ public class dbManager {
                 // Get the 'docs' subdocument
                 Document docs = doc.get("docs", Document.class);
                 if (docs != null) {
-                    // Iterate through the keys of the 'docs' subdocument
-                    for (String docId : docs.keySet()) {
-                        // Add docId to the set (as string)
-                        docIdSet.add(docId);
+                    Set<String> docIds = docs.keySet();
+                    if(intersect && !docIdSet.isEmpty()) {
+                        docIdSet.retainAll(docIds);
+                    }
+                    else {
+                        docIdSet.addAll(docIds);
                     }
                 }
             }
