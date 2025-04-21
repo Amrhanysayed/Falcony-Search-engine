@@ -1,17 +1,17 @@
 package dbManager;
 
+import Indexer.TermInfo;
 import Utils.WebDocument;
 import com.mongodb.client.*;
-import com.mongodb.client.model.Filters;
-import com.mongodb.client.model.Updates;
+import com.mongodb.client.model.*;
 import io.github.cdimascio.dotenv.Dotenv;
 import org.bson.Document;
 import org.bson.types.ObjectId;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 public class dbManager {
     private static final Dotenv dotenv = Dotenv.load();
@@ -77,8 +77,8 @@ public class dbManager {
     }
 
     // Get documents with 'indexed' == false
-    public ArrayList<WebDocument> getDocuments() {
-        ArrayList<WebDocument> docs = new ArrayList<>();
+    public ConcurrentHashMap<String, WebDocument> getNonIndexedDocuments() {
+        ConcurrentHashMap<String, WebDocument> docs = new ConcurrentHashMap<>();
 
         FindIterable<Document> results = collection.find(
                 Filters.eq("indexed", false)
@@ -91,19 +91,22 @@ public class dbManager {
             String id = doc.getObjectId("_id").toString();  // Use ObjectId if _id is the default MongoDB ID field
             boolean indexed = doc.getBoolean("indexed", false);
 
-            WebDocument webDoc = new WebDocument(Integer.parseInt(id), url, title, content);  // Convert ObjectId to String
-            docs.add(webDoc);
+            WebDocument webDoc = new WebDocument(id, url, title, content);  // Convert ObjectId to String
+            docs.put(id, webDoc);
         }
 
         return docs;
     }
 
     // Mark a document as indexed
-    public void markAsIndexed(ObjectId id) {
-        collection.updateOne(
-                Filters.eq("_id", id),
-                Updates.set("indexed", true)
-        );
+    public void markAsIndexed(List<String> ids) {
+        List<ObjectId> objectIds = ids.stream()
+                .map(ObjectId::new)
+                .collect(Collectors.toList());
+
+        Document filter = new Document("_id", new Document("$in", objectIds));
+        Document update = new Document("$set", new Document("indexed", true));
+        collection.updateMany(filter, update);
     }
 
     // Insert token into the tokens collection
@@ -127,6 +130,54 @@ public class dbManager {
         }
     }
 
+    public void insertTokens(Map<String, List<TermInfo>> invertedIndex) {
+        try {
+            // List to hold bulk write operations
+            List<UpdateOneModel<Document>> bulkUpdates = new ArrayList<>();
+
+            // Iterate over the inverted index
+            for (Map.Entry<String, List<TermInfo>> entry : invertedIndex.entrySet()) {
+                String token = entry.getKey();
+                List<TermInfo> terms = entry.getValue();
+
+                // Create updates for each TermInfo
+                for (TermInfo termInfo : terms) {
+                    String docId = termInfo.getDocId();
+                    int frequency = termInfo.getFrequency();
+                    List<Integer> positions = termInfo.getPositions().stream().distinct().toList();
+                    ObjectId id = new ObjectId(docId);
+                    // Create document info
+                    Document docInfo = new Document("docId", id)
+                            .append("frequency", frequency)
+                            .append("positions", positions);
+
+                    // Create UpdateOneModel for this TermInfo
+                    UpdateOneModel<Document> update = new UpdateOneModel<>(
+                            new Document("_id", token), // Filter by token
+                            Updates.combine(
+                                    Updates.set("docs." + docId, docInfo), // Set document info
+                                    Updates.setOnInsert("_id", token) // Set _id if new token
+                            ),
+                            new UpdateOptions().upsert(true) // Enable upsert
+                    );
+
+                    bulkUpdates.add(update);
+                }
+            }
+
+            // Execute bulk write if there are updates
+            if (!bulkUpdates.isEmpty()) {
+                tokensCollection.bulkWrite(bulkUpdates, new BulkWriteOptions().ordered(false));
+                System.out.println("Bulk write completed for " + bulkUpdates.size() + " updates.");
+            } else {
+                System.out.println("No updates to perform.");
+            }
+        } catch (Exception e) {
+            System.err.println("Error during bulk write: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
     // Close the database connection
     public void close() {
         if (mongoClient != null) {
@@ -137,9 +188,8 @@ public class dbManager {
 
     public static void main(String[] args) {
         dbManager DBM = new dbManager();
-        DBM.insertToken("anas", "123", 11, new ArrayList<>(Arrays.asList(1,2,50,5)));
-        DBM.insertToken("anas", "1234", 11, new ArrayList<>(Arrays.asList(1,21,50,5)));
-        DBM.insertToken("anas2", "1234", 11, new ArrayList<>(Arrays.asList(1,2,3,4)));
+        ArrayList<String> ids = new ArrayList<>(Arrays.asList("6803adf92a5a8a19e97290b7", "6803adf92a5a8a19e97290b8"));
+        DBM.markAsIndexed(ids);
         DBM.close();
     }
 }

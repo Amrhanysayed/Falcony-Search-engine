@@ -7,9 +7,9 @@ public class TermInfo {
     String term;
     int frequency;
     private List<Integer> positions;
-    int docId;
+    String docId;
 
-    TermInfo(String term, int frequency, int docId, List<Integer> positions) {
+    TermInfo(String term, int frequency, String docId, List<Integer> positions) {
         this.term = term;
         this.frequency = frequency;
         this.positions = positions;
@@ -25,7 +25,7 @@ public class TermInfo {
     public int getFrequency() {
         return frequency;
     }
-    public int getDocId() {
+    public String getDocId() {
         return docId;
     }
     public void setTermInfo(TermInfo tInfo) {
