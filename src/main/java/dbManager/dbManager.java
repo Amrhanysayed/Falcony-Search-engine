@@ -178,6 +178,67 @@ public class dbManager {
         }
     }
 
+    //
+    public List<WebDocument> getDocsForTokens(List<String> tokens) {
+        try {
+            // Use a Set to ensure unique docIds
+            Set<String> docIdSet = new HashSet<>();
+            long startTime = System.currentTimeMillis();
+
+            // Query tokensCollection for documents where _id is in the token list
+            // Project only the 'docs' field to reduce data transfer
+            for (Document doc : tokensCollection.find(Filters.in("_id", tokens))
+                    .projection(new Document("docs", 1).append("_id", 0))) {
+                // Get the 'docs' subdocument
+                Document docs = doc.get("docs", Document.class);
+                if (docs != null) {
+                    // Iterate through the keys of the 'docs' subdocument
+                    for (String docId : docs.keySet()) {
+                        // Add docId to the set (as string)
+                        docIdSet.add(docId);
+                    }
+                }
+            }
+
+            // Convert Set to List for return
+            List<String> docIdList = new ArrayList<>(docIdSet);
+
+            long endTime = System.currentTimeMillis();
+            System.out.printf("Retrieved %d unique docIds for %d tokens in %.2f seconds%n",
+                    docIdList.size(), tokens.size(), (endTime - startTime) / 1000.0);
+
+            return getDocumentsByIds(docIdList);
+        } catch (Exception e) {
+            System.err.println("Error retrieving docIds: " + e.getMessage());
+            e.printStackTrace();
+            return new ArrayList<>(); // Return empty list on error
+        }
+    }
+
+
+    public List<WebDocument> getDocumentsByIds(List<String> docIds) {
+        List<WebDocument> docs = new ArrayList<>();
+
+        List<ObjectId> objectIds = docIds.stream()
+                .map(ObjectId::new)
+                .collect(Collectors.toList());
+
+        for (Document doc : collection.find(Filters.in("_id", objectIds))) {
+            String id = doc.getObjectId("_id").toString();
+            String url = doc.getString("url");
+            String title = doc.getString("title");
+            String content = doc.getString("content");
+
+            WebDocument webDoc = new WebDocument(id, url, title, content);
+            docs.add(webDoc);
+        }
+
+        return docs;
+    }
+
+
+
+
     // Close the database connection
     public void close() {
         if (mongoClient != null) {

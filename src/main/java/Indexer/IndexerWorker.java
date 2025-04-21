@@ -1,5 +1,6 @@
 package Indexer;
 
+import Utils.Tokenizer;
 import Utils.WebDocument;
 import opennlp.tools.tokenize.TokenizerME;
 

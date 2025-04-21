@@ -1,5 +1,7 @@
 package Indexer;
 
+import Utils.Utils;
+import Utils.Tokenizer;
 import Utils.WebDocument;
 import Utils.StopWords;
 import dbManager.dbManager;
@@ -20,8 +22,6 @@ public class Indexer {
     private dbManager dbManager;
     private final int numThreads = 10;
 
-    private static final Set<String> STOP_WORDS = StopWords.getStopWords();
-    private static final Pattern CLEAN_PATTERN = Pattern.compile("[^a-zA-Z0-9 ]");
     public Indexer() throws Exception {
         invertedIndex = new ConcurrentHashMap<>();
         indexedDocuments = new ConcurrentHashMap<>();
@@ -45,8 +45,8 @@ public class Indexer {
         for (String token : tokens) {
             // Clean token using regex
             // TODO: check this regex
-            String cleaned = CLEAN_PATTERN.matcher(token.toLowerCase()).replaceAll("");
-            if (cleaned.isEmpty() || STOP_WORDS.contains(cleaned)) {
+            String cleaned = Utils.CLEAN_PATTERN.matcher(token.toLowerCase()).replaceAll("");
+            if (cleaned.isEmpty() || Utils.STOP_WORDS.contains(cleaned)) {
                 continue;
             }
 

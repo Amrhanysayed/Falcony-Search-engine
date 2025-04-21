@@ -65,7 +65,7 @@ public class CrawlerWorker implements Runnable {
 
         // Extract title and content
         String title = doc.title() != null && !doc.title().isEmpty() ? doc.title() : "Untitled";
-        String content = doc.body() != null ? doc.body().text() : "";
+        String content = doc.body() != null ? doc.body().html() : ""; // TODO TEST
 
         // Add to batch for MongoDB
         org.bson.Document bsonDoc = new org.bson.Document("url", url)

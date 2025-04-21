@@ -1,4 +1,4 @@
-package Indexer;
+package Utils;
 
 import opennlp.tools.tokenize.TokenizerME;
 import opennlp.tools.tokenize.TokenizerModel;
@@ -10,7 +10,7 @@ public class Tokenizer {
 
     public Tokenizer() throws Exception {
         try {
-            InputStream modelInput = Indexer.class.getResourceAsStream("/en-token.bin");
+            InputStream modelInput = Tokenizer.class.getResourceAsStream("/en-token.bin");
             assert modelInput != null;
             tmodel = new TokenizerModel(modelInput);
             modelInput.close();
@@ -20,6 +20,7 @@ public class Tokenizer {
         }
     }
 
+    // Threading Safe Solution
     public TokenizerME getTokenizerME() {
         return new TokenizerME(tmodel);
     }
