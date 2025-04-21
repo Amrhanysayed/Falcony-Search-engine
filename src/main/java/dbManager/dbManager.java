@@ -1,6 +1,6 @@
 package dbManager;
 
-import Indexer.TermInfo;
+import Utils.Posting;
 import Utils.WebDocument;
 import com.mongodb.client.*;
 import com.mongodb.client.model.*;
@@ -130,21 +130,21 @@ public class dbManager {
         }
     }
 
-    public void insertTokens(Map<String, List<TermInfo>> invertedIndex) {
+    public void insertTokens(Map<String, List<Posting>> invertedIndex) {
         try {
             // List to hold bulk write operations
             List<UpdateOneModel<Document>> bulkUpdates = new ArrayList<>();
 
             // Iterate over the inverted index
-            for (Map.Entry<String, List<TermInfo>> entry : invertedIndex.entrySet()) {
+            for (Map.Entry<String, List<Posting>> entry : invertedIndex.entrySet()) {
                 String token = entry.getKey();
-                List<TermInfo> terms = entry.getValue();
+                List<Posting> terms = entry.getValue();
 
                 // Create updates for each TermInfo
-                for (TermInfo termInfo : terms) {
-                    String docId = termInfo.getDocId();
-                    int frequency = termInfo.getFrequency();
-                    List<Integer> positions = termInfo.getPositions().stream().distinct().toList();
+                for (Posting posting : terms) {
+                    String docId = posting.getDocId();
+                    int frequency = posting.getFrequency();
+                    List<Integer> positions = posting.getPositions().stream().distinct().toList();
                     ObjectId id = new ObjectId(docId);
                     // Create document info
                     Document docInfo = new Document("docId", id)
@@ -178,18 +178,78 @@ public class dbManager {
         }
     }
 
-    //
-    public List<WebDocument> getDocsForTokens(List<String> tokens, boolean intersect) {
+//    //
+//    public List<WebDocument> getDocsForTokens(List<String> tokens, boolean intersect) {
+//        try {
+//            // Use a Set to ensure unique docIds
+//            Set<String> docIdSet = new HashSet<>();
+//            long startTime = System.currentTimeMillis();
+//
+//            // Query tokensCollection for documents where _id is in the token list
+//            // Project only the 'docs' field to reduce data transfer
+//            for (Document doc : tokensCollection.find(Filters.in("_id", tokens))
+//                    .projection(new Document("docs", 1).append("_id", 0))) {
+//                // Get the 'docs' subdocument
+//                Document docs = doc.get("docs", Document.class);
+//                if (docs != null) {
+//                    Set<String> docIds = docs.keySet();
+//                    if(intersect && !docIdSet.isEmpty()) {
+//                        docIdSet.retainAll(docIds);
+//                    }
+//                    else {
+//                        docIdSet.addAll(docIds);
+//                    }
+//                }
+//            }
+//
+//            // Convert Set to List for return
+//            List<String> docIdList = new ArrayList<>(docIdSet);
+//
+//            long endTime = System.currentTimeMillis();
+//            System.out.printf("Retrieved %d unique docIds for %d tokens in %.2f seconds%n",
+//                    docIdList.size(), tokens.size(), (endTime - startTime) / 1000.0);
+//
+//            return getDocumentsByIds(docIdList);
+//        } catch (Exception e) {
+//            System.err.println("Error retrieving docIds: " + e.getMessage());
+//            e.printStackTrace();
+//            return new ArrayList<>(); // Return empty list on error
+//        }
+//    }
+//
+//
+//    public List<WebDocument> getDocumentsByIds(List<String> docIds) {
+//        List<WebDocument> docs = new ArrayList<>();
+//
+//        List<ObjectId> objectIds = docIds.stream()
+//                .map(ObjectId::new)
+//                .collect(Collectors.toList());
+//
+//        for (Document doc : collection.find(Filters.in("_id", objectIds))) {
+//            String id = doc.getObjectId("_id").toString();
+//            String url = doc.getString("url");
+//            String title = doc.getString("title");
+//            String content = doc.getString("content");
+//
+//            WebDocument webDoc = new WebDocument(id, url, title, content);
+//            docs.add(webDoc);
+//        }
+//
+//        return docs;
+//    }
+//
+//
+//
+
+    public Set<String> getDocIdsForTokens(List<String> tokens, boolean intersect) {
         try {
             // Use a Set to ensure unique docIds
             Set<String> docIdSet = new HashSet<>();
             long startTime = System.currentTimeMillis();
-
-            // Query tokensCollection for documents where _id is in the token list
-            // Project only the 'docs' field to reduce data transfer
             for (Document doc : tokensCollection.find(Filters.in("_id", tokens))
-                    .projection(new Document("docs", 1).append("_id", 0))) {
+                    .projection(new Document("docs", 1).append("_id", 1))) {
                 // Get the 'docs' subdocument
+                String token = doc.getString("_id");
                 Document docs = doc.get("docs", Document.class);
                 if (docs != null) {
                     Set<String> docIds = docs.keySet();
@@ -202,24 +262,63 @@ public class dbManager {
                 }
             }
 
-            // Convert Set to List for return
-            List<String> docIdList = new ArrayList<>(docIdSet);
-
             long endTime = System.currentTimeMillis();
             System.out.printf("Retrieved %d unique docIds for %d tokens in %.2f seconds%n",
-                    docIdList.size(), tokens.size(), (endTime - startTime) / 1000.0);
+                    docIdSet.size(), tokens.size(), (endTime - startTime) / 1000.0);
 
-            return getDocumentsByIds(docIdList);
+            return docIdSet;
         } catch (Exception e) {
             System.err.println("Error retrieving docIds: " + e.getMessage());
             e.printStackTrace();
-            return new ArrayList<>(); // Return empty list on error
+            return new HashSet<>(); // Return empty list on error
+        }
+    }
+
+    public Map<String, List<Posting>> getPostingsForTokens(List<String> tokens, Set<String> docIdSet) {
+        try {
+            // Use a Set to ensure unique docIds
+            Map<String, List<Posting>> tokenToTokenInfos = new HashMap<>(); // we need to return this as well
+
+            for (Document doc : tokensCollection.find(Filters.in("_id", tokens))
+                    .projection(new Document("docs", 1).append("_id", 1))) {
+                // Get the 'docs' subdocument
+                String token = doc.getString("_id");
+                Document docs = doc.get("docs", Document.class);
+                if (docs != null) {
+                    // Extract docIds and TokenInfo for this token
+                    List<Posting> postings = new ArrayList<>();
+                    for (Map.Entry<String, Object> entry : docs.entrySet()) {
+                        String docId = entry.getKey();
+                        if (docIdSet.contains(docId)) {
+                            Document docInfo = (Document) entry.getValue();
+
+                            // Create TokenInfo
+                            Posting posting = new Posting(
+                                    token,
+                                    docInfo.getInteger("frequency", 0),
+                                    docId,
+                                    docInfo.getList("positions", Integer.class, new ArrayList<>())
+                            );
+                            postings.add(posting);
+                        }
+                    }
+
+                    // Store TokenInfo list for this token
+                    tokenToTokenInfos.put(token, postings);
+                }
+            }
+
+            return tokenToTokenInfos;
+        } catch (Exception e) {
+            System.err.println("Error retrieving docIds: " + e.getMessage());
+            e.printStackTrace();
+            return new HashMap<>(); // Return empty list on error
         }
     }
 
 
-    public List<WebDocument> getDocumentsByIds(List<String> docIds) {
-        List<WebDocument> docs = new ArrayList<>();
+    public Map<String , WebDocument> getDocumentsByIds(Set<String> docIds) {
+        Map<String , WebDocument> docs = new HashMap<>();
 
         List<ObjectId> objectIds = docIds.stream()
                 .map(ObjectId::new)
@@ -232,14 +331,11 @@ public class dbManager {
             String content = doc.getString("content");
 
             WebDocument webDoc = new WebDocument(id, url, title, content);
-            docs.add(webDoc);
+            docs.put(id , webDoc);
         }
 
         return docs;
     }
-
-
-
 
     // Close the database connection
     public void close() {

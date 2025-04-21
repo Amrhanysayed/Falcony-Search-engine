@@ -1,16 +1,13 @@
-package Indexer;
+package Utils;
 
-import java.util.ArrayList;
 import java.util.List;
 
-public class TermInfo {
-    String term;
+public class Posting {
     int frequency;
     private List<Integer> positions;
-    String docId;
+    public String docId;
 
-    TermInfo(String term, int frequency, String docId, List<Integer> positions) {
-        this.term = term;
+    public Posting(String token, int frequency, String docId, List<Integer> positions) {
         this.frequency = frequency;
         this.positions = positions;
         this.docId = docId;
@@ -25,11 +22,12 @@ public class TermInfo {
     public int getFrequency() {
         return frequency;
     }
+
     public String getDocId() {
         return docId;
     }
-    public void setTermInfo(TermInfo tInfo) {
-        this.term = tInfo.term;
+
+    public void setTokenInfo(Posting tInfo) {
         this.frequency = tInfo.frequency;
         this.positions = tInfo.positions;
     }

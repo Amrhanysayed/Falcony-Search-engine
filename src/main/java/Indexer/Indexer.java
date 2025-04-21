@@ -3,18 +3,17 @@ package Indexer;
 import Utils.Utils;
 import Utils.Tokenizer;
 import Utils.WebDocument;
-import Utils.StopWords;
 import dbManager.dbManager;
 import opennlp.tools.stemmer.PorterStemmer;
 import opennlp.tools.tokenize.TokenizerME;
+import Utils.Posting;
 import org.jsoup.Jsoup;
 
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.regex.Pattern;
 
 public class Indexer {
-    private static ConcurrentHashMap<String, List<TermInfo>> invertedIndex;
+    private static ConcurrentHashMap<String, List<Posting>> invertedIndex;
     private static ConcurrentHashMap<String, WebDocument> indexedDocuments;
     private static ConcurrentHashMap<String, WebDocument> unindexedDocs;
     private static Tokenizer tokenizer;
@@ -32,7 +31,8 @@ public class Indexer {
 
     public static void indexDocument(WebDocument document, TokenizerME tokenizer) {
         indexedDocuments.put(document.getId(), document);
-        String soup = Jsoup.parse(document.content).text().replaceAll("\\s+", " ").trim();
+        String soup = document.getSoupedContent();
+        // TODO Remove
         String[] tokens = tokenizer.tokenize(soup);
 
 
@@ -61,12 +61,12 @@ public class Indexer {
         for (Map.Entry<String, Integer> entry : termFreq.entrySet()) {
             String term = entry.getKey();
             int freq = entry.getValue();
-            TermInfo tInfo = new TermInfo(term, freq, document.getId(), positions.computeIfAbsent(term, k -> new ArrayList<>()));
+            Posting tInfo = new Posting(term, freq, document.getId(), positions.computeIfAbsent(term, k -> new ArrayList<>()));
             invertedIndex.computeIfAbsent(term, k -> new ArrayList<>());
             boolean dup = false;
-            for (TermInfo termInfo : invertedIndex.get(term)) {
-                if(termInfo.getDocId() == document.getId()) {
-                    termInfo.setTermInfo(tInfo);
+            for (Posting tokenInfo : invertedIndex.get(term)) {
+                if(tokenInfo.getDocId() == document.getId()) {
+                    tokenInfo.setTokenInfo(tInfo);
                     dup = true;
                     break;
                 }
@@ -119,9 +119,9 @@ public class Indexer {
 
     // For debugging
     public void printIndex() {
-        for (Map.Entry<String, List<TermInfo>> entry : invertedIndex.entrySet()) {
+        for (Map.Entry<String, List<Posting>> entry : invertedIndex.entrySet()) {
             System.out.println("Term: " + entry.getKey());
-            for (TermInfo p : entry.getValue()) {
+            for (Posting p : entry.getValue()) {
                 System.out.println("  DocID: " + p.docId + ", Freq: " + p.getFrequency());
                 System.out.println("  Pos: " + p.getPositions());
             }

@@ -1,31 +1,39 @@
 package QueryProcessor;
 
+import Ranker.Ranker;
+import Ranker.TokenBasedRanker;
+import Ranker.RankerContext;
 import Utils.Tokenizer;
-import Utils.WebDocument;
 import Utils.Utils;
+import Utils.WebDocument;
 import dbManager.dbManager;
 import opennlp.tools.stemmer.PorterStemmer;
 import opennlp.tools.tokenize.TokenizerME;
-import opennlp.tools.stemmer.PorterStemmer;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 public class QueryProcessor {
 
     dbManager db;
+
     public QueryProcessor() {
-        dbManager db = new dbManager();
+        db = new dbManager();  // Fixed: Assign to instance variable, not local variable
     }
 
-    public void processs(String query) throws Exception {
-        List <String> queryTerms = new ArrayList<>();
-        List <WebDocument> candidateDocs = new ArrayList<>();
+    public void process(String query) throws Exception {
+        List<String> queryTerms = new ArrayList<>();
+        Set<String> candidateDocsIds = new HashSet<>();
 
-        // Tokenatzeion get queryterms ready
+        // Tokenization get query terms ready
         Tokenizer tokenizer = new Tokenizer();
         TokenizerME tokenizerMe = tokenizer.getTokenizerME();
         String[] tokens = tokenizerMe.tokenize(query);
         PorterStemmer stemmer = new PorterStemmer();
+
         for (String token : tokens) {
             String cleaned = Utils.CLEAN_PATTERN.matcher(token.toLowerCase()).replaceAll("");
             if (cleaned.isEmpty() || Utils.STOP_WORDS.contains(cleaned)) {
@@ -34,36 +42,46 @@ public class QueryProcessor {
 
             String stemmed = stemmer.stem(cleaned);
             queryTerms.add(stemmed);
-
         }
-        // check if " "
-        if (true) // isPhrase(query)
+
+        if (isFullyQuoted(query))
         {
-            candidateDocs = db.getDocsForTokens(queryTerms, true);
+            System.out.println("Fully quoted query: " + query);
+            candidateDocsIds = db.getDocIdsForTokens(queryTerms, true);
+        } else
+        {
+            candidateDocsIds = db.getDocIdsForTokens(queryTerms, false);
         }
-        else {
-            candidateDocs = db.getDocsForTokens(queryTerms, false);
-        }
 
-            // Candidiate docs
+        List<WebDocument> Results = new ArrayList<>();
+        RankerContext rankerContext = new RankerContext();
+        Ranker TOKENBASED = new TokenBasedRanker(0);
+        rankerContext.setRanker(TOKENBASED);
+        Results = rankerContext.rank(queryTerms, candidateDocsIds);
 
-
-            for (WebDocument doc : candidateDocs)
-                doc.Print();
-
+        int count = 0;
+        for (WebDocument doc : Results) {
+            System.out.println();
+            doc.Print();
+            count++;
+            if (count == 5) break;
         }
 
     }
 
-    // This module receives search queries, performs necessary preprocessing and searches the index for relevant
-    //documents. Retrieve documents containing words that share the same stem with those in the search query. For
-    //example, the search query “travel” should match (with lower degree) the words “traveler”, “traveling” … etc.
 
-    // call ranker with candidate docs + tokens or phrases
+    public static boolean isFullyQuoted(String text) {
+        if (text == null || text.isEmpty()) {
+            return false;
+        }
+
+        String regex = "^\"(.*)\"$";
+        return Pattern.matches(regex, text);
+    }
 
     public static void main(String[] args) throws Exception {
         QueryProcessor qp = new QueryProcessor();
-        qp.processs("reddeadredemption");
+        qp.process("saving private ryan");
 
     }
 
