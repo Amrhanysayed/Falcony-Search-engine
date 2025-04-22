@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class TokenBasedRanker implements Ranker {
 
@@ -24,7 +25,7 @@ public class TokenBasedRanker implements Ranker {
 
 
     @Override
-    public List<WebDocument> rank(List<String> tokens, Set<String> candidateDocsIds) {
+    public Set<WebDocument> rank(List<String> tokens, Set<String> candidateDocsIds) {
 
         Map<String, Double> docScores = new HashMap<>();
         Integer totalDocCount = candidateDocsIds.size();
@@ -38,7 +39,7 @@ public class TokenBasedRanker implements Ranker {
             sumDocLen += doc.getSoupedContent().length();
         }
 
-        avgdoclen = sumDocLen / totalDocCount;
+        avgdoclen = (double) sumDocLen / totalDocCount;
 
         for (String token : tokens) {
             List<Posting> postings = tokenToPostings.get(token);
@@ -66,8 +67,7 @@ public class TokenBasedRanker implements Ranker {
 
         return docScores.entrySet().stream()
                 .sorted((a, b) -> Double.compare(b.getValue(), a.getValue())) // descending score
-                .map(entry -> candidateDocs.get(entry.getKey()))
-                .toList();
+                .map(entry -> candidateDocs.get(entry.getKey())).collect(Collectors.toSet());
 
     }
 

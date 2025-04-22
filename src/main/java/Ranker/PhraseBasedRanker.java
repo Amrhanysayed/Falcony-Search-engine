@@ -1,27 +1,37 @@
-//package Ranker;
-//import java.util.List;
-//
-//public class PhraseBasedRanker implements Ranker {
-//
-//    private final int popularityAlpha ;
-//
-//    public PhraseBasedRanker(int popularityAlpha) {
-//        this.popularityAlpha = popularityAlpha;
-//    }
-//
-//    List<Integer> rank(List<String> phrases, List<Integer> candidateDocs){
-//
-//        // loop through phrases
-//        // check how many times found in each doc and consider adding weight to where
-//        // it's found maybe library ?
-//        // finally score + alpha * pop
-//        // return sorted docs IDS
-//        // TODO later on should handle the LOGICAL OPERATIONS
-//
-//    }
-//
-//
-//
-//}
-//
-//
+package Ranker;
+import Utils.Posting;
+import Utils.WebDocument;
+import dbManager.dbManager;
+
+import java.util.*;
+import java.util.stream.Collectors;
+
+public class PhraseBasedRanker implements Ranker {
+
+    private final int popularityAlpha ;
+    private dbManager db;
+    public PhraseBasedRanker(int popularityAlpha) {
+        this.popularityAlpha = popularityAlpha;
+        db = new dbManager();
+    }
+
+    @Override
+    public Set<WebDocument> rank(List<String> tokens, Set<String> candidateDocsIds) {
+        String text = tokens.getFirst();
+
+
+
+        Map<String , WebDocument> candidateDocs = db.getDocumentsByIds(candidateDocsIds);
+
+
+        candidateDocs.entrySet().removeIf(entry ->
+                !entry.getValue().getSoupedContent().toLowerCase().contains(text));
+
+        return new HashSet<>(candidateDocs.values());
+    }
+
+
+
+}
+
+

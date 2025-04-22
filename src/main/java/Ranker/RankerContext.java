@@ -13,7 +13,7 @@ public class RankerContext  {
         this.ranker = r;
     }
 
-    public List<WebDocument> rank(List<String> queryTerms, Set<String> candidateDocsIds) {
+    public Set<WebDocument> rank(List<String> queryTerms, Set<String> candidateDocsIds) {
         return ranker.rank(queryTerms, candidateDocsIds);
     }
 
