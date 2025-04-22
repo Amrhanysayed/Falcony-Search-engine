@@ -64,15 +64,34 @@ public class CrawlerWorker implements Runnable {
         System.out.println("Crawling: " + url);
 
         // Extract title and content
-        String title = doc.title() != null && !doc.title().isEmpty() ? doc.title() : "Untitled";
-        String content = doc.body() != null ? doc.body().html() : ""; // TODO TEST
+          String title = !doc.title().isEmpty() ? doc.title() : "Untitled";
+          String content = doc.body().html(); // TODO TEST
+
+
+        // Extract links
+        Elements links = doc.select("a[href]");
+        System.out.println("links sized " + links.size());
+
+        // Start timing
+        long startTime = System.currentTimeMillis();
+
+        // Submit link processing tasks
+        List<Runnable> linkTasks = new ArrayList<>();
+        List<String> linksText = new ArrayList<>();
+
+        for (Element link : links) {
+          String newUrl = link.absUrl("href");
+          linkTasks.add(() -> processLink(newUrl, url));
+          linksText.add(newUrl); // TODO: insert normalized URL instead
+        }
 
         // Add to batch for MongoDB
         org.bson.Document bsonDoc = new org.bson.Document("url", url)
                 .append("title", title)
                 .append("content", content)
                 .append("timestamp", System.currentTimeMillis())
-                .append("indexed", false);
+                .append("indexed", false)
+                .append("links", linksText);
         batch.add(bsonDoc);
 
         // Insert batch if large enough
@@ -86,20 +105,6 @@ public class CrawlerWorker implements Runnable {
         if (pageCount.incrementAndGet() >= maxPages) {
           urlsToCrawl.clear();
           break;
-        }
-
-        // Process links in parallel
-        Elements links = doc.select("a[href]");
-        System.out.println("links sized " + links.size());
-
-        // Start timing
-        long startTime = System.currentTimeMillis();
-
-        // Submit link processing tasks
-        List<Runnable> linkTasks = new ArrayList<>();
-        for (Element link : links) {
-          String newUrl = link.absUrl("href");
-          linkTasks.add(() -> processLink(newUrl, url));
         }
 
         // Execute tasks in parallel
