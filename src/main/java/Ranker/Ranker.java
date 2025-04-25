@@ -7,6 +7,6 @@ import java.util.Set;
 
 public interface Ranker {
 
-     Set<WebDocument> rank(List<String> tokens, Set<String> candidateDocsIds) ;
+     List<WebDocument> rank(List<String> tokens, Set<String> candidateDocsIds , String logicalOperator) ;
 
 }

@@ -26,95 +26,91 @@ public class QueryProcessor {
     }
 
     public void process(String query) throws Exception {
-        boolean isUsingOperator = false;
-        boolean isSinglePhrase = false;
-        query = query.trim().toLowerCase();
-
-        String text1 = "", operator = "", text2 = "";
-        // Is using operator
+        query = query.trim().toLowerCase(); // ALL COMING LOGIC IS BASED ON LOWERCASE
+        List<String> queryTexts = new ArrayList<>();
         Pattern pattern = Pattern.compile("\"([^\"]*)\"\\s*(AND|OR|NOT)\\s*\"([^\"]*)\"", Pattern.CASE_INSENSITIVE);
+        boolean isUsingOperator = false;
+        boolean isUsingPhrase = false;
+        String operator = "";
         Matcher matcher = pattern.matcher(query);
+
+        // Check Operator Case
         if (matcher.matches()) {
-            text1 = matcher.group(1).trim();
-            operator = matcher.group(2).toUpperCase();
-            text2 = matcher.group(3).trim();
+            queryTexts.add(matcher.group(1).trim());
+            operator = matcher.group(2).trim();
+            if (!Set.of("and", "or", "not").contains(operator)) {
+                System.out.println("ERROR: Invalid operator: " + operator);
+                throw new IllegalArgumentException("Invalid logical operator: " + operator);
+            }
+            queryTexts.add(matcher.group(3).trim());
             isUsingOperator = true;
-        }
-        // Is single phrase
-        if (!isUsingOperator) {
+            System.out.println("Operator 2 Phrases");
+
+        }else { // Check Single Phrase Case
             pattern  = Pattern.compile("^\"(.*)\"$");
             matcher = pattern.matcher(query);
             if (matcher.matches()) {
-                text1 = matcher.group(1).trim();
-                isSinglePhrase = true;
+                queryTexts.add(matcher.group(1).trim());
+                isUsingPhrase = true;
+                System.out.println("Single Phrase");
             }
-        }
-        if(!isSinglePhrase && !isUsingOperator) {
-            text1 = query;
-        }
-
-        // Tokenization get query terms ready
-
-        List<String> queryTerms = tokenizer.Tokenize(text1);
-        Set<String> docsIds1 = new HashSet<>(), docsIds2 = new HashSet<>();
-
-        docsIds1 = db.getDocIdsForTokens(queryTerms, isSinglePhrase || isUsingOperator);
-        if(isUsingOperator) {
-            List<String> queryTerms2 = tokenizer.Tokenize(text2);
-            docsIds2 = db.getDocIdsForTokens(queryTerms2, true);
+            else
+                queryTexts.add(query); // tokenBased
         }
 
-        Set<WebDocument> Results = new HashSet<>();
+        Set<String> candidateDocIds = new HashSet<>();
         RankerContext rankerContext = new RankerContext();
-        if(!isSinglePhrase && !isUsingOperator) {
-            Ranker TOKENBASED = new TokenBasedRanker(0);
-            rankerContext.setRanker(TOKENBASED);
+        List<String> tokensFirst = tokenizer.Tokenize(queryTexts.get(0));
+        List<String> tokensSecond = isUsingOperator ? tokenizer.Tokenize(queryTexts.get(1)) : new ArrayList<>();
+
+        System.out.println(tokensFirst);
+        System.out.println(tokensSecond);
+
+        // Ranker Context
+        List<String> queryTerms = new ArrayList<>();
+        if (isUsingOperator || isUsingPhrase) {
+
+            candidateDocIds = db.getDocIdsForTokens(tokensFirst, true);
+            Set<String> candidateDocIdsSecond = db.getDocIdsForTokens(tokensSecond, true);
+
+            if (operator.equals("and")) {
+                candidateDocIds.retainAll(candidateDocIdsSecond);
+            } else if (operator.equals("or")) {
+                candidateDocIds.addAll(candidateDocIdsSecond);
+            }
+
+            rankerContext.setRanker(new PhraseBasedRanker(0));
+            queryTerms = queryTexts;
         }
         else {
-            Ranker PHRASEBASED = new PhraseBasedRanker(0);
-            rankerContext.setRanker(PHRASEBASED);
+            candidateDocIds = db.getDocIdsForTokens(tokensFirst , false);
+            rankerContext.setRanker(new TokenBasedRanker(0));
+            queryTerms = tokensFirst;
+            System.out.println("Token Based");
         }
 
-        queryTerms = isSinglePhrase || isUsingOperator ? List.of(text1) : queryTerms;
-
-        Results = rankerContext.rank(queryTerms, docsIds1);
-
-        if(isUsingOperator) {
-            Set<WebDocument> Results2 = rankerContext.rank(List.of(text2), docsIds2);
-            if(operator.equals("AND")) {
-                Results.retainAll(Results2);
-            }
-            else if(operator.equals("OR")) {
-                Results.addAll(Results2);
-            }
-            else if(operator.equals("NOT")) {
-                Results.removeAll(Results2);
-            }
-        }
+        List<WebDocument> Results = rankerContext.rank(queryTerms , candidateDocIds, operator);
+        System.out.println(queryTerms);
+        System.out.println(candidateDocIds);
+        System.out.println(operator);
 
         System.out.println("Found " + Results.size() + " results");
-        int count = 0;
+
+        int counter = 0;
         for (WebDocument doc : Results) {
             System.out.println();
             doc.Print();
-            count++;
+            counter++;
+            if (counter > 10)
+                break;
         }
 
     }
 
-
-    public static boolean isFullyQuoted(String text) {
-        if (text == null || text.isEmpty()) {
-            return false;
-        }
-
-        String regex = "^\"(.*)\"$";
-        return Pattern.matches(regex, text);
-    }
 
     public static void main(String[] args) throws Exception {
         QueryProcessor qp = new QueryProcessor();
-        qp.process("\"saving private ryan\" AND \"godfather\"");
+        qp.process("How to play minecraft");
 
     }
 
