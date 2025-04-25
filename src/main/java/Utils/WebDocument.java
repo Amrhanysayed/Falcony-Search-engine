@@ -30,6 +30,14 @@ public class WebDocument {
         return docId;
     }
 
+    public int getPopularity() {
+        return popularity;
+    }
+
+    public String getTitle() {
+        return title;
+    }
+
     public String getSoupedContent() {
         return Jsoup.parse(html).text().replaceAll("\\s+", " ").trim();
     }
