@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class CrawlerWorker implements Runnable {
-  private final ConcurrentLinkedQueue<String> urlsToCrawl;
+  private final ConcurrentLinkedQueue<String> urlsToCrawl ;
   private final Set<String> visited;
   private final AtomicInteger pageCount;
   private final int maxPages;
@@ -61,6 +61,7 @@ public class CrawlerWorker implements Runnable {
         }
       }
 
+
       // Skip if already visited
       if (!visited.add(url)) {
         continue;
@@ -105,7 +106,10 @@ public class CrawlerWorker implements Runnable {
             linksText.add(normalizedUrl);
             // Only add to crawl queue if not visited and allowed by robots.txt
             if (!visited.contains(normalizedUrl) && canCrawl(normalizedUrl)) {
+              if(urlsToCrawl.size()<10000){
               urlsToCrawl.add(normalizedUrl);
+
+              }
               linkCount++;
             }
           }
@@ -140,6 +144,8 @@ public class CrawlerWorker implements Runnable {
           // Add to queue with timeout to prevent blocking forever
           if (!documentQueue.offer(bsonDoc, 5, TimeUnit.SECONDS)) {
             System.err.println("Failed to queue document: " + url + " - queue full");
+          }else{
+            System.out.println("sucess to add : " + url);
           }
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();

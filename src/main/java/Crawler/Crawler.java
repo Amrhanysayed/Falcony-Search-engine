@@ -49,11 +49,8 @@ public class Crawler {
     void readExcludeParams() {
         Set<String> tempParams = ConcurrentHashMap.newKeySet();
         try {
-            InputStream inputStream = Crawler.class.getResourceAsStream("/exclude_params.txt");
-            if (inputStream == null) {
-                throw new IOException("Resource not found: /exclude_params.txt");
-            }
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
+
+            try (BufferedReader reader = new BufferedReader(new  FileReader("src/exclude_params.txt"))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     line = line.trim();
@@ -292,6 +289,10 @@ public class Crawler {
             if (urlNormalizeCache.size() < 10000) { // Limit cache size
                 urlNormalizeCache.put(cacheKey, normalizedUrl);
             }
+
+            while (normalizedUrl.endsWith("?")) {
+                normalizedUrl = normalizedUrl.substring(0, normalizedUrl.length() - 1);
+            }
             return normalizedUrl;
         } catch (Exception e) {
             return null;
@@ -314,6 +315,7 @@ public class Crawler {
             System.err.println("Crawling failed: " + e.getMessage());
         } finally {
             cr.close();
+            System.exit(0);
         }
     }
 
@@ -346,7 +348,7 @@ public class Crawler {
                     if (doc != null) {
                         batch.add(doc);
                     }
-
+                    System.out.println("batch size is = "+batch.size());
                     // Insert batch if large enough or if no more documents are coming
                     if (batch.size() >= BATCH_SIZE || (!running && !batch.isEmpty() && queue.isEmpty())) {
                         try {
