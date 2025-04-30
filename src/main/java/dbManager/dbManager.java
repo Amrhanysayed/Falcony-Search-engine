@@ -24,12 +24,15 @@ public class dbManager {
     private final MongoCollection<Document> tokensCollection;  // Renamed for proper casing
     private MongoDatabase database;
     private final MongoCollection<Document> collection;
-
+    private final MongoCollection<Document> crawlerStateCollection;
     public dbManager() {
         mongoClient = MongoClients.create(CONNECTION_STRING);
         database = mongoClient.getDatabase(DB_NAME);
         collection = database.getCollection(COLLECTION_NAME);
+
         tokensCollection = database.getCollection("tokens");  // Renamed for proper casing
+
+        crawlerStateCollection= database.getCollection("crawler_state");
         System.out.println("Connected to MongoDB Atlas.");
     }
 
@@ -58,6 +61,50 @@ public class dbManager {
             System.err.println("Failed to insert documents: " + e.getMessage());
         }
     }
+
+    public void saveCrawlerState(Queue<String> urlsToCrawl, Set<String> visited, int pageCount) {
+        try {
+            Document stateDoc = new Document("_id", "crawler_state")
+                    .append("urlsToCrawl", new ArrayList<>(urlsToCrawl))
+                    .append("visited", new ArrayList<>(visited))
+                    .append("pageCount", pageCount)
+                    .append("timestamp", System.currentTimeMillis());
+
+            crawlerStateCollection.replaceOne(
+                    Filters.eq("_id", "crawler_state"),
+                    stateDoc,
+                    new ReplaceOptions().upsert(true)
+            );
+            System.out.println("Saved crawler state: " + pageCount + " pages, " +
+                    urlsToCrawl.size() + " URLs to crawl, " + visited.size() + " visited");
+        } catch (Exception e) {
+            System.err.println("Failed to save crawler state: " + e.getMessage());
+        }
+    }
+
+    public Map<String, Object> loadCrawlerState() {
+        try {
+            Document stateDoc = crawlerStateCollection.find(Filters.eq("_id", "crawler_state")).first();
+            if (stateDoc == null) {
+                System.out.println("No crawler state found, starting fresh");
+                return null;
+            }
+            Map<String, Object> state = new HashMap<>();
+            state.put("urlsToCrawl", stateDoc.getList("urlsToCrawl", String.class, new ArrayList<>()));
+            state.put("visited", stateDoc.getList("visited", String.class, new ArrayList<>()));
+            state.put("pageCount", stateDoc.getInteger("pageCount", 0));
+            System.out.println("Loaded crawler state: " + state.get("pageCount") + " pages, " +
+                    ((List<?>) state.get("urlsToCrawl")).size() + " URLs to crawl, " +
+                    ((List<?>) state.get("visited")).size() + " visited");
+            return state;
+        } catch (Exception e) {
+            System.err.println("Failed to load crawler state: " + e.getMessage());
+
+            return null;
+        }
+    }
+
+
 
     // Search documents by keyword
     public void searchByKeyword(String keyword) {

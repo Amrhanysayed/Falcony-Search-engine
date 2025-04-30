@@ -67,7 +67,12 @@ public class CrawlerWorker implements Runnable {
 
         // Extract links
         Elements links = doc.select("a[href]");
+
+        Elements images = doc.select("img[src]");
+
         System.out.println("links sized " + links.size());
+
+        System.out.println("images sized"+ images.size());
 
         // Start timing
         long startTime = System.currentTimeMillis();
@@ -75,6 +80,12 @@ public class CrawlerWorker implements Runnable {
         // Submit link processing tasks
         List<Runnable> linkTasks = new ArrayList<>();
         Set<String> linksText = ConcurrentHashMap.newKeySet();
+        Set<String> linkImages = ConcurrentHashMap.newKeySet();
+
+        for(Element image:images){
+          String imageUrl = image.absUrl("src");
+          linkImages.add(imageUrl);
+        }
 
         for (Element link : links) {
           String newUrl = link.absUrl("href");
@@ -98,7 +109,8 @@ public class CrawlerWorker implements Runnable {
                 .append("content", content)
                 .append("timestamp", System.currentTimeMillis())
                 .append("indexed", false)
-                .append("links", linksText);
+                .append("links", linksText)
+                .append("images",linkImages);
         batch.add(bsonDoc);
 
         // Insert batch if large enough

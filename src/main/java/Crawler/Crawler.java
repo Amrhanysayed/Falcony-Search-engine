@@ -5,17 +5,14 @@ import org.jsoup.nodes.Document;
 
 import java.io.*;
 import java.net.URI;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.Map;
-import java.util.Arrays;
 import java.util.stream.Collectors;
-import java.util.Collections;
 
 
 import dbManager.dbManager;
@@ -38,11 +35,29 @@ public class Crawler {
         this.robotsM = new RobotsManager();
         executor = Executors.newFixedThreadPool(numThreads);
         this.readExcludedParams();
+        addShutdownHook();
     }
 
     public void startCrawl(String filename) throws Exception {
-        readStartLinks(filename);
+
+
+        Map<String, Object> state = mongo.loadCrawlerState();
+        if (state != null) {
+            List<String> savedUrlsToCrawl = (List<String>) state.get("urlsToCrawl");
+            List<String> savedVisited = (List<String>) state.get("visited");
+            int savedPageCount = (Integer) state.get("pageCount");
+            urlsToCrawl.addAll(savedUrlsToCrawl);
+            visited.addAll(savedVisited);
+            pageCount.set(savedPageCount);
+        }else{
+            readStartLinks(filename);
+        }
         crawl();
+
+    }
+
+    private void saveState() {
+        mongo.saveCrawlerState(urlsToCrawl, visited, pageCount.get());
     }
 
 
@@ -138,6 +153,7 @@ public class Crawler {
         for (int i = 0; i < numThreads; i++) {
             executor.submit(new CrawlerWorker(urlsToCrawl, visited, pageCount, maxPages, robotsM,mongo));
         }
+        saveState();
         executor.shutdown();
         try {
             if (!executor.awaitTermination(1, TimeUnit.HOURS)) {
@@ -151,6 +167,22 @@ public class Crawler {
             System.err.println("Crawl interrupted: " + e.getMessage());
             Thread.currentThread().interrupt();
         }
+
+    }
+
+    private void addShutdownHook() {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            System.out.println("Shutdown hook triggered, saving crawler state");
+            saveState();
+            close();
+        }));
+    }
+
+    public void close() {
+        saveState();
+        mongo.close();
+        executor.shutdownNow();
+        System.out.println("Crawler closed");
     }
 
     public static void main(String[] args) {
@@ -163,6 +195,8 @@ public class Crawler {
             System.out.println("Finished crawling.");
         } catch (Exception e) {
             System.err.println("Crawling failed: " + e.getMessage());
+        }finally {
+            cr.close();
         }
     }
 
