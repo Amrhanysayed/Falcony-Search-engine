@@ -51,6 +51,10 @@ public class dbManager {
         System.out.println("Document inserted: " + title);
     }
 
+    public MongoCollection<Document> getDocumentsCollection() {
+        return collection;
+    }
+
     public void insertDocuments(List<Document> documents) {
         try {
             if (!documents.isEmpty()) {
