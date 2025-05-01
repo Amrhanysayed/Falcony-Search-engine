@@ -1,164 +1,182 @@
 package Crawler;
 
+import org.bson.Document;
 import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Set;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import dbManager.dbManager;
 
 public class CrawlerWorker implements Runnable {
-  private final ConcurrentLinkedQueue<String> urlsToCrawl;
+  private final ConcurrentLinkedQueue<String> urlsToCrawl ;
   private final Set<String> visited;
   private final AtomicInteger pageCount;
   private final int maxPages;
   private final RobotsManager robotsM;
-  private final dbManager dbManager;
-  private ExecutorService linkProcessor; // Thread pool for link processing
+  private final BlockingQueue<Document> documentQueue;
+  private final Crawler crawler;
+  private final ConcurrentHashMap<String, Boolean> canCrawlCache;
 
-  public CrawlerWorker(ConcurrentLinkedQueue<String> urlsToCrawl,
-                       Set<String> visited,
-                       AtomicInteger pageCount,
-                       int maxPages,
-                       RobotsManager robotsM,
-                       dbManager dbManager) {
+  // Constants
+  private static final int CONNECT_TIMEOUT = 15000; // 15 seconds
+  private static final int MAX_IMAGES_PER_PAGE = 50;
+
+  public CrawlerWorker(
+          ConcurrentLinkedQueue<String> urlsToCrawl,
+          Set<String> visited,
+          AtomicInteger pageCount,
+          int maxPages,
+          RobotsManager robotsM,
+          BlockingQueue<Document> documentQueue,
+          Crawler crawler,
+          ConcurrentHashMap<String, Boolean> canCrawlCache) {
     this.urlsToCrawl = urlsToCrawl;
     this.visited = visited;
     this.pageCount = pageCount;
     this.maxPages = maxPages;
     this.robotsM = robotsM;
-    this.dbManager = dbManager;
-    // Create a thread pool for link processing (e.g., 4 threads per worker)
-    this.linkProcessor = Executors.newFixedThreadPool(4);
+    this.documentQueue = documentQueue;
+    this.crawler = crawler;
+    this.canCrawlCache = canCrawlCache;
   }
 
   @Override
   public void run() {
-    List<org.bson.Document> batch = new ArrayList<>();
-    while (!urlsToCrawl.isEmpty() && pageCount.get() < maxPages) {
+    while (!Thread.currentThread().isInterrupted() && pageCount.get() < maxPages) {
       String url = urlsToCrawl.poll();
-      if (url == null || !visited.add(url)) {
+      if (url == null) {
+        // If no URLs, wait a bit before trying again
+        try {
+          Thread.sleep(100);
+          continue;
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          break;
+        }
+      }
+
+
+      // Skip if already visited
+      if (!visited.add(url)) {
         continue;
       }
 
-      if (!robotsM.canCrawl(url)) {
-        System.out.println("Blocked by robots.txt: " + url);
+      // Check robots.txt (with caching)
+      if (!canCrawl(url)) {
         continue;
       }
 
       try {
-        Document doc = Jsoup.connect(url)
-                .timeout(5000)
+
+        org.jsoup.nodes.Document doc = Jsoup.connect(url)
+                .timeout(CONNECT_TIMEOUT)
                 .ignoreContentType(true)
+                .ignoreHttpErrors(true)
+                .followRedirects(true)
+                .maxBodySize(1_000_000) // 1MB
                 .get();
 
-        System.out.println("Crawling: " + url);
+        int currentCount = pageCount.incrementAndGet();
 
-        // Extract title and content
-          String title = !doc.title().isEmpty() ? doc.title() : "Untitled";
-          String content = doc.body().html(); // TODO TEST
+        // Extract page data
+        String title = doc.title() != null && !doc.title().isEmpty() ? doc.title() : "Untitled";
+        String content = doc.body() != null ? doc.body().html() : "";
 
 
-        // Extract links
         Elements links = doc.select("a[href]");
-        System.out.println("links sized " + links.size());
+        Elements images = doc.select("img[src]");
 
-        // Start timing
-        long startTime = System.currentTimeMillis();
+        Set<String> linksText = ConcurrentHashMap.newKeySet();
+        Set<String> imageUrls = ConcurrentHashMap.newKeySet();
 
-        // Submit link processing tasks
-        List<Runnable> linkTasks = new ArrayList<>();
-        List<String> linksText = new ArrayList<>();
-
+        // Process links
+        int linkCount = 0;
         for (Element link : links) {
           String newUrl = link.absUrl("href");
-          linkTasks.add(() -> processLink(newUrl, url));
-          linksText.add(newUrl); // TODO: insert normalized URL instead
+          if (newUrl.isEmpty()) continue;
+
+          String normalizedUrl = crawler.normalizeUrl(newUrl, url);
+          if (normalizedUrl != null && normalizedUrl.length() < 500) { // Avoid extremely long URLs
+            linksText.add(normalizedUrl);
+            // Only add to crawl queue if not visited and allowed by robots.txt
+            if (!visited.contains(normalizedUrl) && canCrawl(normalizedUrl)) {
+              if(urlsToCrawl.size()<10000){
+              urlsToCrawl.add(normalizedUrl);
+
+              }
+              linkCount++;
+            }
+          }
         }
 
-        // Add to batch for MongoDB
-        org.bson.Document bsonDoc = new org.bson.Document("url", url)
+
+        // Process images with limit 50 image per page
+        int imageCount = 0;
+        for (Element image : images) {
+          if (imageCount >= MAX_IMAGES_PER_PAGE) break;
+
+          String imageUrl = image.absUrl("src");
+          if (imageUrl.isEmpty()) continue;
+
+          String normalizedImageUrl = crawler.normalizeUrl(imageUrl, url);
+          if (normalizedImageUrl != null) {
+            imageUrls.add(normalizedImageUrl);
+            imageCount++;
+          }
+        }
+
+        // Create document and add to queue
+        Document bsonDoc = new Document("url", url)
                 .append("title", title)
                 .append("content", content)
                 .append("timestamp", System.currentTimeMillis())
                 .append("indexed", false)
-                .append("links", linksText);
-        batch.add(bsonDoc);
+                .append("links", linksText)
+                .append("images", imageUrls);
 
-        // Insert batch if large enough
-
-        if (batch.size() >= 100) {
-
-          dbManager.insertDocuments(batch);
-          batch.clear();
-        }
-
-        if (pageCount.incrementAndGet() >= maxPages) {
-          urlsToCrawl.clear();
+        try {
+          // Add to queue with timeout to prevent blocking forever
+          if (!documentQueue.offer(bsonDoc, 15, TimeUnit.SECONDS)) {
+            System.err.println("Failed to queue document: " + url + " - queue full");
+          }else{
+            System.out.println("sucess to add : " + url);
+          }
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
           break;
         }
 
-        // Execute tasks in parallel
-        for (Runnable task : linkTasks) {
-          linkProcessor.submit(task);
+        // check if we finish the 600 pages
+        if (pageCount.get() >= maxPages) {
+          break;
         }
-
-        // Shutdown and wait for link processing to complete
-        linkProcessor.shutdown();
-        try {
-          if (!linkProcessor.awaitTermination(10, TimeUnit.SECONDS)) {
-            linkProcessor.shutdownNow();
-            System.err.println("Link processing timed out for URL: " + url);
-          }
-        } catch (InterruptedException e) {
-          linkProcessor.shutdownNow();
-          System.err.println("Link processing interrupted for URL: " + url);
-          Thread.currentThread().interrupt();
-        }
-
-        // Recreate thread pool for next URL
-        linkProcessor = Executors.newFixedThreadPool(4);
-
-        // End timing
-        long endTime = System.currentTimeMillis();
-        System.out.println("Link processing took: " + (endTime - startTime) + " ms");
 
       } catch (IOException e) {
-        System.err.println("Failed to fetch: " + url + " - " + e.getMessage());
+          System.err.println("Failed to fetch: " + url + " - " + e.getMessage());
       }
     }
-
-    // Insert remaining batch
-    if (!batch.isEmpty()) {
-      dbManager.insertDocuments(batch);
-    }
-
-    // Clean up link processor
-    linkProcessor.shutdownNow();
   }
 
-  private void processLink(String newUrl, String baseUrl) {
-    try {
-      String normalized = Crawler.normalizeUrl(newUrl, baseUrl);
-      if (normalized != null &&
-              !normalized.isEmpty() &&
-              !visited.contains(normalized) &&
-              robotsM.canCrawl(normalized)) {
-        System.out.println("Found: " + normalized);
-        urlsToCrawl.add(normalized);
-        System.out.println("the queue size is: " + urlsToCrawl.size());
-      }
-    } catch (Exception e) {
-      System.err.println("Failed to normalize URL: " + newUrl + " - " + e.getMessage());
+  private boolean canCrawl(String url) {
+    // Check cache first
+    Boolean cached = canCrawlCache.get(url);
+    if (cached != null) {
+      return cached;
     }
+
+    boolean result = robotsM.canCrawl(url);
+
+    // Cache the result if cache isn't too large
+    if (canCrawlCache.size() < 1000) {
+      canCrawlCache.put(url, result);
+    }
+
+    return result;
   }
 }
