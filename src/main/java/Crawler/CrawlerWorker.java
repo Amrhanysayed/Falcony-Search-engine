@@ -24,7 +24,7 @@ public class CrawlerWorker implements Runnable {
   private final ConcurrentHashMap<String, Boolean> canCrawlCache;
 
   // Constants
-  private static final int CONNECT_TIMEOUT = 5000; // 5 seconds
+  private static final int CONNECT_TIMEOUT = 15000; // 15 seconds
   private static final int MAX_IMAGES_PER_PAGE = 50;
 
   public CrawlerWorker(
@@ -142,7 +142,7 @@ public class CrawlerWorker implements Runnable {
 
         try {
           // Add to queue with timeout to prevent blocking forever
-          if (!documentQueue.offer(bsonDoc, 5, TimeUnit.SECONDS)) {
+          if (!documentQueue.offer(bsonDoc, 15, TimeUnit.SECONDS)) {
             System.err.println("Failed to queue document: " + url + " - queue full");
           }else{
             System.out.println("sucess to add : " + url);
