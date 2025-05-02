@@ -4,8 +4,11 @@ import ImageSearching.Image;
 import Utils.Posting;
 import Utils.WebDocument;
 import com.mongodb.MongoBulkWriteException;
+import com.mongodb.bulk.BulkWriteError;
+import com.mongodb.bulk.BulkWriteResult;
 import com.mongodb.client.*;
 import com.mongodb.client.model.*;
+import com.mongodb.client.result.InsertManyResult;
 import io.github.cdimascio.dotenv.Dotenv;
 import org.bson.Document;
 import org.bson.types.ObjectId;
@@ -18,25 +21,34 @@ import java.util.stream.Collectors;
 public class dbManager {
     private static final Dotenv dotenv = Dotenv.load();
     private static final String CONNECTION_STRING = dotenv.get("MONGO_URL");
+    private static final String IMAGES_CONNECTION_STRING = dotenv.get("MONGO_IMAGES_URL");
 
     private static final String DB_NAME = "search_engine";
     private static final String COLLECTION_NAME = "documents";
 
     private final MongoClient mongoClient;
+    private final MongoClient imagesMongoClient;
     private final MongoCollection<Document> tokensCollection;  // Renamed for proper casing
     private MongoDatabase database;
+    private MongoDatabase imagesDatabase;
     private final MongoCollection<Document> collection;
     private final MongoCollection<Document> crawlerStateCollection;
     private final MongoCollection<Document> imageCollection;
 
+    private static final int BULK_WRITE_BATCH_SIZE = 1000;
 
     public dbManager() {
         mongoClient = MongoClients.create(CONNECTION_STRING);
+        imagesMongoClient = MongoClients.create(IMAGES_CONNECTION_STRING);
         database = mongoClient.getDatabase(DB_NAME);
         collection = database.getCollection(COLLECTION_NAME);
 
         tokensCollection = database.getCollection("tokens");  // Renamed for proper casing
         imageCollection = database.getCollection("images");
+
+
+        imagesDatabase = imagesMongoClient.getDatabase(DB_NAME);
+        imageCollection = imagesDatabase.getCollection("images");
 
 
         crawlerStateCollection= database.getCollection("crawler_state");
@@ -168,27 +180,6 @@ public class dbManager {
         collection.updateMany(filter, update);
     }
 
-    // Insert token into the tokens collection
-    public void insertToken(String token, String docId, int frequency, List<Integer> positions) {
-        try {
-            Document docInfo = new Document("docId", docId)
-                    .append("frequency", frequency)
-                    .append("positions", positions.stream().distinct().toList()); // Remove duplicate positions
-
-            // Update token with the document info
-            tokensCollection.updateOne(
-                    Filters.eq("_id", token),
-                    Updates.combine(
-                            Updates.set("docs." + docId, docInfo), // Prevent duplicate docId
-                            Updates.setOnInsert("_id", token)  // Set _id if new token
-                    ),
-                    new com.mongodb.client.model.UpdateOptions().upsert(true)
-            );
-        } catch (Exception e) {
-            e.printStackTrace();  // Log the error for debugging
-        }
-    }
-
     public void insertTokens(Map<String, List<Posting>> invertedIndex) {
         try {
             // List to hold bulk write operations
@@ -226,10 +217,24 @@ public class dbManager {
 
             // Execute bulk write if there are updates
             if (!bulkUpdates.isEmpty()) {
-                tokensCollection.bulkWrite(bulkUpdates, new BulkWriteOptions().ordered(false));
-                System.out.println("Bulk write completed for " + bulkUpdates.size() + " updates.");
+                int totalUpdates = bulkUpdates.size();
+                System.out.println("Preparing to write " + totalUpdates + " token updates");
+
+                for (int i = 0; i < totalUpdates; i += BULK_WRITE_BATCH_SIZE) {
+                    int endIndex = Math.min(i + BULK_WRITE_BATCH_SIZE, totalUpdates);
+                    List<UpdateOneModel<Document>> batch = bulkUpdates.subList(i, endIndex);
+                    try {
+                        tokensCollection.bulkWrite(batch, new BulkWriteOptions().ordered(false));
+                        System.out.println("Bulk write completed for batch " + (i / BULK_WRITE_BATCH_SIZE + 1) +
+                                " (" + batch.size() + " updates)");
+                    } catch (com.mongodb.MongoException e) {
+                        System.err.println("Failed to write batch " + (i / BULK_WRITE_BATCH_SIZE + 1) +
+                                ": " + e.getMessage());
+                        throw e;
+                    }
+                }
             } else {
-                System.out.println("No updates to perform.");
+                System.out.println("No token updates to perform.");
             }
         } catch (Exception e) {
             System.err.println("Error during bulk write: " + e.getMessage());
@@ -396,49 +401,98 @@ public class dbManager {
         return docs;
     }
 
+
     public void saveImages(List<Image> images) {
+        if (images.isEmpty()) {
+            System.out.println("No images to process.");
+            return;
+        }
 
-        // Get existing URLs to avoid duplicates
-        List<String> urls = images.stream().map(Image::getUrl).collect(Collectors.toList());
-        Set<String> existingUrls = new HashSet<>();
-        imageCollection.find(Filters.in("url", urls)).forEach(doc -> existingUrls.add(doc.getString("url")));
-
-        List<Document> toInsert = new ArrayList<>();
+        // Extract unique URLs from incoming images
+        Map<String, Image> uniqueIncomingImages = new HashMap<>();
         for (Image img : images) {
-            if (existingUrls.contains(img.getUrl())) {
-                System.out.println("⚠️ Skipped duplicate: " + img.getUrl());
+            // Keep only the first occurrence of each URL
+            uniqueIncomingImages.putIfAbsent(img.getUrl(), img);
+        }
+
+        if (uniqueIncomingImages.isEmpty()) {
+            System.out.println("⚠️ No unique images to process after deduplication.");
+            return;
+        }
+
+        // Check against database in a single query
+        Set<String> uniqueUrls = uniqueIncomingImages.keySet();
+        Set<String> existingUrls = new HashSet<>();
+
+        // Fetch only the URL field for efficiency
+        imageCollection.find(Filters.in("url", new ArrayList<>(uniqueUrls)))
+                .projection(Projections.include("url"))
+                .forEach(doc -> existingUrls.add(doc.getString("url")));
+
+        // Prepare documents for non-duplicates
+        List<Document> toInsert = new ArrayList<>();
+        int skippedCount = 0;
+
+        for (Map.Entry<String, Image> entry : uniqueIncomingImages.entrySet()) {
+            String url = entry.getKey();
+            if (existingUrls.contains(url)) {
+                skippedCount++;
                 continue;
             }
 
-            List<Double> featureList = new ArrayList<>(img.getFeatures().length);
-            for (float f : img.getFeatures()) {
-                featureList.add((double) f);
-            }
-
-            Document imageDoc = new Document()
-                    .append("_id", img.getId()) // Use UUID from image.setId
-                    .append("url", img.getUrl())
-                    .append("docUrl", img.getDocUrl())
-                    .append("features", featureList)
-                    .append("_class", img.getClass().getName());
-
+            Image img = entry.getValue();
+            Document imageDoc = createImageDocument(img);
             toInsert.add(imageDoc);
         }
 
+        // Reporting
+        System.out.println("Total images received: " + images.size());
+        System.out.println("Unique incoming images: " + uniqueIncomingImages.size());
+        System.out.println("⚠️ Skipped " + skippedCount + " duplicates from database.");
+
+        // Bulk insert if any remain
         if (!toInsert.isEmpty()) {
             try {
-                imageCollection.insertMany(toInsert, new InsertManyOptions().ordered(false));
-                System.out.println("✅ Inserted " + toInsert.size() + " new images.");
+                imageCollection.insertMany(
+                        toInsert,
+                        new InsertManyOptions().ordered(false)
+                );
+                System.out.println("✅ Successfully inserted " + toInsert.size() + " new images.");
             } catch (MongoBulkWriteException e) {
-                System.err.println("Bulk write error: " + e.getMessage());
-                e.getWriteErrors().forEach(err ->
-                        System.err.println("Failed document at index " + err.getIndex() + ": " + err.getMessage()));
+                int successCount = e.getWriteResult().getInsertedCount();
+                System.out.println("✅ Partially successful: inserted " + successCount + " images.");
+                System.err.println("❌ Failed to insert " + e.getWriteErrors().size() + " images.");
+
+                // Log only the first few errors to avoid overwhelming logs
+                int errorLimit = Math.min(e.getWriteErrors().size(), 5);
+                for (int i = 0; i < errorLimit; i++) {
+                    BulkWriteError err = e.getWriteErrors().get(i);
+                    System.err.println("  - Error at index " + err.getIndex() + ": " + err.getMessage());
+                }
+                if (errorLimit < e.getWriteErrors().size()) {
+                    System.err.println("  - (+" + (e.getWriteErrors().size() - errorLimit) + " more errors)");
+                }
             } catch (Exception e) {
-                System.err.println("Unexpected error: " + e.getMessage());
+                System.err.println("❌ Unexpected error: " + e.getMessage());
             }
         } else {
-            System.out.println("⚠️ No new images to insert.");
+            System.out.println("⚠️ No new images to insert after deduplication.");
         }
+    }
+
+    private Document createImageDocument(Image img) {
+        // Convert float[] features to List<Double> for MongoDB
+        List<Double> featureList = new ArrayList<>(img.getFeatures().length);
+        for (float f : img.getFeatures()) {
+            featureList.add((double) f);
+        }
+
+        return new Document()
+                .append("_id", img.getId())
+                .append("url", img.getUrl())
+                .append("docUrl", img.getDocUrl())
+                .append("features", featureList)
+                .append("_class", img.getClass().getName());
     }
 
 

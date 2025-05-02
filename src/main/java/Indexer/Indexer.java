@@ -17,22 +17,27 @@ import java.util.*;
 import java.util.concurrent.*;
 
 public class Indexer {
+    // Keeping static variables as in original code
     private static ConcurrentHashMap<String, List<Posting>> invertedIndex;
     private static ConcurrentHashMap<String, WebDocument> indexedDocuments;
     private static ConcurrentHashMap<String, WebDocument> unindexedDocs;
     private static ConcurrentLinkedQueue<Image> imageQueue;
     private static Tokenizer tokenizer;
-    private ExecutorService executor, imageExecutor;
-    private dbManager dbManager;
-    private ImageFeatureExtractor imageFeatureExtractor;
-    private final int numThreads = 8;
+    private final dbManager dbManager;
+    private final ImageFeatureExtractor imageFeatureExtractor;
+    private static final int numThreads = 9;
+    private static final int batchSize = 200;
+
+    // Added constants for image optimization
+    private static final int MAX_IMAGES_PER_DOC = 10;
+    private static final int IMAGE_SAVE_BATCH_SIZE = 100;
 
     public Indexer() throws Exception {
         invertedIndex = new ConcurrentHashMap<>();
         indexedDocuments = new ConcurrentHashMap<>();
         tokenizer = new Tokenizer();
         dbManager = new dbManager();
-        unindexedDocs = dbManager.getNonIndexedDocuments(100);
+        unindexedDocs = dbManager.getNonIndexedDocuments(batchSize);
         imageFeatureExtractor = new ImageFeatureExtractor();
         imageFeatureExtractor.init();
 
@@ -75,7 +80,7 @@ public class Indexer {
             invertedIndex.computeIfAbsent(term, k -> new ArrayList<>());
             boolean dup = false;
             for (Posting tokenInfo : invertedIndex.get(term)) {
-                if(tokenInfo.getDocId() == document.getId()) {
+                if(tokenInfo.getDocId().equals(document.getId())) {
                     tokenInfo.setTokenInfo(tInfo);
                     dup = true;
                     break;
@@ -87,14 +92,24 @@ public class Indexer {
         }
     }
 
+    // Modified image processing method with size and count limits
     public static void processImagesInDocument(WebDocument document, ImageFeatureExtractor imageFeatureExtractor) {
         List<String> images = document.getImages();
+        int processedCount = 0;
+
         for (String imageUrl : images) {
             if (imageUrl.isEmpty()) continue;
 
+            // Limit to MAX_IMAGES_PER_DOC per document
+            if (processedCount >= MAX_IMAGES_PER_DOC) {
+                System.out.println("Reached max image limit (" + MAX_IMAGES_PER_DOC + ") for document: " + document.getUrl());
+                break;
+            }
+
             try {
                 System.out.println("Processing image: " + imageUrl);
-                byte[] imageBytes = Utils.downloadImage(imageUrl); // implement this
+                byte[] imageBytes = Utils.downloadImage(imageUrl);
+
                 float[] features = imageFeatureExtractor.extractFeatures(imageBytes);
                 Image image = new Image();
                 image.setFeatures(features);
@@ -102,72 +117,149 @@ public class Indexer {
                 image.setDocUrl(document.getUrl());
                 image.setId(UUID.randomUUID().toString());
                 imageQueue.add(image);
+                processedCount++;
+
+                // Save images periodically to prevent memory build-up
+                if (imageQueue.size() >= IMAGE_SAVE_BATCH_SIZE) {
+                    saveImageQueueBatch();
+                }
+
                 System.out.println("✅ Image saved: " + imageUrl);
             } catch (Exception e) {
                 System.err.println("❌ Error indexing image: " + imageUrl + " | " + e.getMessage());
             }
         }
+    }
 
+    // New helper method to save images in batches
+    private static void saveImageQueueBatch() {
+        if (imageQueue.isEmpty()) return;
+
+        List<Image> imgsBatch = new ArrayList<>(IMAGE_SAVE_BATCH_SIZE);
+        int count = 0;
+
+        while (!imageQueue.isEmpty() && count < IMAGE_SAVE_BATCH_SIZE) {
+            imgsBatch.add(imageQueue.poll());
+            count++;
+        }
+
+        if (!imgsBatch.isEmpty()) {
+            try {
+                System.out.println("📦 Saving intermediate batch of " + imgsBatch.size() + " images");
+                // Assuming this is a static reference to dbManager, or you can pass the instance
+                new dbManager().saveImages(imgsBatch);
+                System.out.println("✅ Intermediate image batch saved");
+            } catch (Exception e) {
+                System.err.println("❌ Failed to save intermediate image batch: " + e.getMessage());
+                // Put images back in queue if save fails
+                imageQueue.addAll(imgsBatch);
+            }
+        }
     }
 
     public void runIndexer() throws Exception {
         System.out.println("Starting indexer...");
-        executor = Executors.newFixedThreadPool(numThreads);
-        imageExecutor = Executors.newFixedThreadPool(3);
+
+        while (!unindexedDocs.isEmpty()) {
+            // Process text content first
+            processTextInDocuments();
+
+            // Then process images after text processing is complete
+            processImagesInDocuments();
+
+            // Update database and clear collections
+            saveDataAndPrepareNextBatch();
+
+            // Check if we need to run another batch
+            if (!unindexedDocs.isEmpty()) {
+                System.out.println("Running another indexing batch.");
+            }
+        }
+
+        System.out.println("Indexing completed.");
+    }
+
+    private void processTextInDocuments() throws InterruptedException {
+        System.out.println("Processing text content...");
+        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+
         try {
-            while (!unindexedDocs.isEmpty()) {
-                for (WebDocument doc : unindexedDocs.values()) {
-                    executor.submit(new IndexerWorker(doc, tokenizer));
-                    imageExecutor.submit(new ImageIndexerWorker(doc, imageFeatureExtractor));
-                }
-                unindexedDocs.clear();
+            // Submit text processing tasks
+            for (WebDocument doc : unindexedDocs.values()) {
+                executor.submit(new IndexerWorker(doc, tokenizer));
             }
-        } finally {
-            // Shutdown executor and wait for tasks to complete
+
+            // Initiate shutdown and wait for completion
             executor.shutdown();
-            imageExecutor.shutdown();
-            try {
-                if (!executor.awaitTermination(10, TimeUnit.MINUTES)) {
-                    executor.shutdownNow(); // Force shutdown if tasks don't finish
-                }
-                if(!imageExecutor.awaitTermination(10, TimeUnit.MINUTES)) {
-                    imageExecutor.shutdownNow();
-                }
-                ArrayList<String> indexedIds = new ArrayList<>(indexedDocuments.keySet());
-                dbManager.markAsIndexed(indexedIds);
-                indexedDocuments.clear();
-
-                unindexedDocs = dbManager.getNonIndexedDocuments(100);
-
-                System.out.println("Indexing batch completed, updating tokens.");
-                dbManager.insertTokens(invertedIndex);
-                System.out.println("Tokens indexed.");
-
-                invertedIndex.clear();
-
-                try {
-                    List<Image> imgsList = new ArrayList<>();
-                    while (!imageQueue.isEmpty()) {
-                        imgsList.add(imageQueue.poll());
-                    }
-
-                    dbManager.saveImages(imgsList);
-
-                    imageQueue.clear();
-                }
-                catch (Exception e) {
-                    e.printStackTrace();
-                }
-
-                if (!unindexedDocs.isEmpty()) {
-                    System.out.println("Running another indexing batch.");
-                    runIndexer();
-                }
-            } catch (InterruptedException e) {
+            if (!executor.awaitTermination(10, TimeUnit.MINUTES)) {
+                System.err.println("Text indexing timed out, forcing shutdown");
                 executor.shutdownNow();
-                imageExecutor.shutdownNow();
-                Thread.currentThread().interrupt();
             }
+        } catch (Exception e) {
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
+            throw e;
+        }
+
+        System.out.println("Text processing completed.");
+    }
+
+    private void processImagesInDocuments() throws InterruptedException {
+        System.out.println("Processing images...");
+        // Use fewer threads for image processing as requested
+        ExecutorService imageExecutor = Executors.newFixedThreadPool(numThreads / 2);
+
+        try {
+            // Submit image processing tasks
+            for (WebDocument doc : unindexedDocs.values()) {
+                imageExecutor.submit(new ImageIndexerWorker(doc, imageFeatureExtractor));
+            }
+
+            // Initiate shutdown and wait for completion
+            imageExecutor.shutdown();
+            if (!imageExecutor.awaitTermination(10, TimeUnit.MINUTES)) {
+                System.err.println("Image indexing timed out, forcing shutdown");
+                imageExecutor.shutdownNow();
+            }
+        } catch (Exception e) {
+            imageExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
+            throw e;
+        }
+
+        System.out.println("Image processing completed.");
+    }
+
+    private void saveDataAndPrepareNextBatch() {
+        try {
+            // Mark documents as indexed
+            ArrayList<String> indexedIds = new ArrayList<>(indexedDocuments.keySet());
+            dbManager.markAsIndexed(indexedIds);
+            System.out.println("Indexing completed.");
+            indexedDocuments.clear();
+
+            // Insert tokens into database
+            System.out.println("Updating tokens in database...");
+            dbManager.insertTokens(invertedIndex);
+            invertedIndex.clear();
+
+            // Save any remaining processed images
+            System.out.println("Saving remaining processed images...");
+            List<Image> imgsList = new ArrayList<>();
+            while (!imageQueue.isEmpty()) {
+                imgsList.add(imageQueue.poll());
+            }
+
+            if (!imgsList.isEmpty()) {
+               // dbManager.saveImages(imgsList);
+            }
+
+            // Get next batch of unindexed documents
+            unindexedDocs.clear();
+            unindexedDocs = dbManager.getNonIndexedDocuments(batchSize);
+        } catch (Exception e) {
+            System.err.println("Error persisting data: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
@@ -184,8 +276,6 @@ public class Indexer {
 
     public static void main(String[] args) throws Exception {
         Indexer indexer = new Indexer();
-        // mehlbya
         indexer.runIndexer();
-        //indexer.printIndex();
     }
 }
