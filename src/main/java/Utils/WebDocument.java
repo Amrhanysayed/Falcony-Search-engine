@@ -2,11 +2,14 @@ package Utils;
 
 import org.jsoup.Jsoup;
 
+import java.util.List;
+
 public class WebDocument {
     public final String docId; // Made final for immutability
     public String url, title, html;
     public int popularity;
     public int[] children;
+    private List<String> images;
 
     public WebDocument(String docId, String url, String title, String html, int popularity, int[] children) {
         this.docId = docId;
@@ -26,8 +29,20 @@ public class WebDocument {
         this.children = null; // Default value
     }
 
+    public WebDocument(String docId, String url, String title, String html, List<String> images) {
+        this.docId = docId;
+        this.url = url;
+        this.title = title;
+        this.html = html;
+        this.images = images;
+    }
+
     public String getId() {
         return docId;
+    }
+
+    public String getUrl() {
+        return url;
     }
 
     public int getPopularity() {
@@ -40,6 +55,10 @@ public class WebDocument {
 
     public String getSoupedContent() {
         return Jsoup.parse(html).text().replaceAll("\\s+", " ").trim();
+    }
+
+    public List<String> getImages() {
+        return images;
     }
 
     public void Print() {

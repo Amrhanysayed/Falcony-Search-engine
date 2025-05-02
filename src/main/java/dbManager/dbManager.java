@@ -1,7 +1,9 @@
 package dbManager;
 
+import ImageSearching.Image;
 import Utils.Posting;
 import Utils.WebDocument;
+import com.mongodb.MongoBulkWriteException;
 import com.mongodb.client.*;
 import com.mongodb.client.model.*;
 import io.github.cdimascio.dotenv.Dotenv;
@@ -25,12 +27,17 @@ public class dbManager {
     private MongoDatabase database;
     private final MongoCollection<Document> collection;
     private final MongoCollection<Document> crawlerStateCollection;
+    private final MongoCollection<Document> imageCollection;
+
+
     public dbManager() {
         mongoClient = MongoClients.create(CONNECTION_STRING);
         database = mongoClient.getDatabase(DB_NAME);
         collection = database.getCollection(COLLECTION_NAME);
 
         tokensCollection = database.getCollection("tokens");  // Renamed for proper casing
+        imageCollection = database.getCollection("images");
+
 
         crawlerStateCollection= database.getCollection("crawler_state");
         System.out.println("Connected to MongoDB Atlas.");
@@ -128,21 +135,22 @@ public class dbManager {
     }
 
     // Get documents with 'indexed' == false
-    public ConcurrentHashMap<String, WebDocument> getNonIndexedDocuments() {
+    public ConcurrentHashMap<String, WebDocument> getNonIndexedDocuments(int limit) {
         ConcurrentHashMap<String, WebDocument> docs = new ConcurrentHashMap<>();
 
         FindIterable<Document> results = collection.find(
                 Filters.eq("indexed", false)
-        );
+        ).limit(limit);
 
         for (Document doc : results) {
             String url = doc.getString("url");
             String title = doc.getString("title");
             String content = doc.getString("content");
-            String id = doc.getObjectId("_id").toString();  // Use ObjectId if _id is the default MongoDB ID field
+            String id = doc.getObjectId("_id").toString();
             boolean indexed = doc.getBoolean("indexed", false);
+            List<String> images = doc.getList("images", String.class);
 
-            WebDocument webDoc = new WebDocument(id, url, title, content);  // Convert ObjectId to String
+            WebDocument webDoc = new WebDocument(id, url, title, content, images);
             docs.put(id, webDoc);
         }
 
@@ -387,6 +395,52 @@ public class dbManager {
 
         return docs;
     }
+
+    public void saveImages(List<Image> images) {
+
+        // Get existing URLs to avoid duplicates
+        List<String> urls = images.stream().map(Image::getUrl).collect(Collectors.toList());
+        Set<String> existingUrls = new HashSet<>();
+        imageCollection.find(Filters.in("url", urls)).forEach(doc -> existingUrls.add(doc.getString("url")));
+
+        List<Document> toInsert = new ArrayList<>();
+        for (Image img : images) {
+            if (existingUrls.contains(img.getUrl())) {
+                System.out.println("⚠️ Skipped duplicate: " + img.getUrl());
+                continue;
+            }
+
+            List<Double> featureList = new ArrayList<>(img.getFeatures().length);
+            for (float f : img.getFeatures()) {
+                featureList.add((double) f);
+            }
+
+            Document imageDoc = new Document()
+                    .append("_id", img.getId()) // Use UUID from image.setId
+                    .append("url", img.getUrl())
+                    .append("docUrl", img.getDocUrl())
+                    .append("features", featureList)
+                    .append("_class", img.getClass().getName());
+
+            toInsert.add(imageDoc);
+        }
+
+        if (!toInsert.isEmpty()) {
+            try {
+                imageCollection.insertMany(toInsert, new InsertManyOptions().ordered(false));
+                System.out.println("✅ Inserted " + toInsert.size() + " new images.");
+            } catch (MongoBulkWriteException e) {
+                System.err.println("Bulk write error: " + e.getMessage());
+                e.getWriteErrors().forEach(err ->
+                        System.err.println("Failed document at index " + err.getIndex() + ": " + err.getMessage()));
+            } catch (Exception e) {
+                System.err.println("Unexpected error: " + e.getMessage());
+            }
+        } else {
+            System.out.println("⚠️ No new images to insert.");
+        }
+    }
+
 
     // Close the database connection
     public void close() {

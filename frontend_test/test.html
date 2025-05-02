@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Image Search</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    input[type="file"] { margin-bottom: 10px; }
+    img { max-width: 200px; margin: 10px; border: 1px solid #ccc; }
+    #results { display: flex; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+
+  <h1>Image Search</h1>
+  <input type="file" id="fileInput" accept="image/*">
+  <button onclick="uploadAndSearch()">Search Similar Images</button>
+
+  <h2>Results:</h2>
+  <div id="results" style="display: flex; flex-direction: column;"></div>
+
+  <script>
+    async function uploadAndSearch() {
+      const input = document.getElementById('fileInput');
+      if (!input.files.length) {
+        alert('Please choose an image.');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('file', input.files[0]);
+
+      try {
+        const response = await fetch('http://localhost:8080/search', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!response.ok) throw new Error('Search failed');
+
+        const images = await response.json();
+        const resultsDiv = document.getElementById('results');
+        resultsDiv.innerHTML = '';
+
+        images.forEach(img => {
+            const imgElement = document.createElement('img');
+            imgElement.src = img.url;
+            imgElement.alt = 'Similar Image';
+            imgElement.style.width = '200px';
+            imgElement.style.height = 'auto';
+            imgElement.style.margin = '10px';
+            imgElement.attributes['referrerpolicy'] = 'no-referrer';
+          
+          resultsDiv.appendChild(imgElement);
+          resultsDiv.appendChild(document.createElement('br'));
+        });
+
+      } catch (error) {
+        console.error('Error:', error);
+        alert('Image search failed.');
+      }
+    }
+  </script>
+
+</body>
+</html>
