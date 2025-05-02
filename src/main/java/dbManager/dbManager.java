@@ -43,8 +43,6 @@ public class dbManager {
         database = mongoClient.getDatabase(DB_NAME);
         docsCollections = database.getCollection(COLLECTION_NAME);
         tokensCollection = database.getCollection("tokens");  // Renamed for proper casing
-        imageCollection = database.getCollection("images");
-
 
         imagesDatabase = imagesMongoClient.getDatabase(DB_NAME);
         imageCollection = imagesDatabase.getCollection("images");
@@ -67,10 +65,6 @@ public class dbManager {
 
         docsCollections.insertOne(doc);
         System.out.println("Document inserted: " + title);
-    }
-
-    public MongoCollection<Document> getDocumentsCollection() {
-        return collection;
     }
 
     public void insertDocuments(List<Document> documents) {

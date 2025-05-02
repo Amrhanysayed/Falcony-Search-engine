@@ -1,12 +1,19 @@
+import Crawler.Crawler;
+import Indexer.Indexer;
+import Pagerank.LinkGraphBuilder;
+import Pagerank.PageRank;
+import Pagerank.PageRankCalculator;
 import QueryProcessor.QueryProcessor;
+import dbManager.dbManager;
 
 
 public class Engine {
     Engine() { }
 
     public static void main(String[] args) throws Exception {
-        QueryProcessor qp = new QueryProcessor();
-        qp.process("\"Anas is the best\"");
+        Crawler.main(args);
+        Indexer.main(args);
+        PageRank.main(args);
 
     }
 
