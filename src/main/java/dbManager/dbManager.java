@@ -31,7 +31,7 @@ public class dbManager {
     private final MongoCollection<Document> tokensCollection;  // Renamed for proper casing
     private MongoDatabase database;
     private MongoDatabase imagesDatabase;
-    private final MongoCollection<Document> collection;
+    private final MongoCollection<Document> docsCollections;
     private final MongoCollection<Document> crawlerStateCollection;
     private final MongoCollection<Document> imageCollection;
 
@@ -41,8 +41,7 @@ public class dbManager {
         mongoClient = MongoClients.create(CONNECTION_STRING);
         imagesMongoClient = MongoClients.create(IMAGES_CONNECTION_STRING);
         database = mongoClient.getDatabase(DB_NAME);
-        collection = database.getCollection(COLLECTION_NAME);
-
+        docsCollections = database.getCollection(COLLECTION_NAME);
         tokensCollection = database.getCollection("tokens");  // Renamed for proper casing
         imageCollection = database.getCollection("images");
 
@@ -66,7 +65,7 @@ public class dbManager {
                 .append("timestamp", System.currentTimeMillis())
                 .append("indexed", false);
 
-        collection.insertOne(doc);
+        docsCollections.insertOne(doc);
         System.out.println("Document inserted: " + title);
     }
 
@@ -77,7 +76,7 @@ public class dbManager {
     public void insertDocuments(List<Document> documents) {
         try {
             if (!documents.isEmpty()) {
-                collection.insertMany(documents);
+                docsCollections.insertMany(documents);
                 System.out.println("Inserted " + documents.size() + " documents");
             }
         } catch (Exception e) {
@@ -132,7 +131,7 @@ public class dbManager {
     // Search documents by keyword
     public void searchByKeyword(String keyword) {
         Pattern pattern = Pattern.compile(keyword, Pattern.CASE_INSENSITIVE);
-        FindIterable<Document> results = collection.find(
+        FindIterable<Document> results = docsCollections.find(
                 Filters.or(
                         Filters.regex("title", pattern),
                         Filters.regex("content", pattern)
@@ -150,7 +149,7 @@ public class dbManager {
     public ConcurrentHashMap<String, WebDocument> getNonIndexedDocuments(int limit) {
         ConcurrentHashMap<String, WebDocument> docs = new ConcurrentHashMap<>();
 
-        FindIterable<Document> results = collection.find(
+        FindIterable<Document> results = docsCollections.find(
                 Filters.eq("indexed", false)
         ).limit(limit);
 
@@ -177,7 +176,7 @@ public class dbManager {
 
         Document filter = new Document("_id", new Document("$in", objectIds));
         Document update = new Document("$set", new Document("indexed", true));
-        collection.updateMany(filter, update);
+        docsCollections.updateMany(filter, update);
     }
 
     public void insertTokens(Map<String, List<Posting>> invertedIndex) {
@@ -241,69 +240,6 @@ public class dbManager {
             e.printStackTrace();
         }
     }
-
-//    //
-//    public List<WebDocument> getDocsForTokens(List<String> tokens, boolean intersect) {
-//        try {
-//            // Use a Set to ensure unique docIds
-//            Set<String> docIdSet = new HashSet<>();
-//            long startTime = System.currentTimeMillis();
-//
-//            // Query tokensCollection for documents where _id is in the token list
-//            // Project only the 'docs' field to reduce data transfer
-//            for (Document doc : tokensCollection.find(Filters.in("_id", tokens))
-//                    .projection(new Document("docs", 1).append("_id", 0))) {
-//                // Get the 'docs' subdocument
-//                Document docs = doc.get("docs", Document.class);
-//                if (docs != null) {
-//                    Set<String> docIds = docs.keySet();
-//                    if(intersect && !docIdSet.isEmpty()) {
-//                        docIdSet.retainAll(docIds);
-//                    }
-//                    else {
-//                        docIdSet.addAll(docIds);
-//                    }
-//                }
-//            }
-//
-//            // Convert Set to List for return
-//            List<String> docIdList = new ArrayList<>(docIdSet);
-//
-//            long endTime = System.currentTimeMillis();
-//            System.out.printf("Retrieved %d unique docIds for %d tokens in %.2f seconds%n",
-//                    docIdList.size(), tokens.size(), (endTime - startTime) / 1000.0);
-//
-//            return getDocumentsByIds(docIdList);
-//        } catch (Exception e) {
-//            System.err.println("Error retrieving docIds: " + e.getMessage());
-//            e.printStackTrace();
-//            return new ArrayList<>(); // Return empty list on error
-//        }
-//    }
-//
-//
-//    public List<WebDocument> getDocumentsByIds(List<String> docIds) {
-//        List<WebDocument> docs = new ArrayList<>();
-//
-//        List<ObjectId> objectIds = docIds.stream()
-//                .map(ObjectId::new)
-//                .collect(Collectors.toList());
-//
-//        for (Document doc : collection.find(Filters.in("_id", objectIds))) {
-//            String id = doc.getObjectId("_id").toString();
-//            String url = doc.getString("url");
-//            String title = doc.getString("title");
-//            String content = doc.getString("content");
-//
-//            WebDocument webDoc = new WebDocument(id, url, title, content);
-//            docs.add(webDoc);
-//        }
-//
-//        return docs;
-//    }
-//
-//
-//
 
     public Set<String> getDocIdsForTokens(List<String> tokens, boolean intersect) {
         try {
@@ -388,7 +324,7 @@ public class dbManager {
                 .map(ObjectId::new)
                 .collect(Collectors.toList());
 
-        for (Document doc : collection.find(Filters.in("_id", objectIds))) {
+        for (Document doc : docsCollections.find(Filters.in("_id", objectIds))) {
             String id = doc.getObjectId("_id").toString();
             String url = doc.getString("url");
             String title = doc.getString("title");
@@ -401,6 +337,36 @@ public class dbManager {
         return docs;
     }
 
+    public List<Document> getDocumentsForGraphBuilder() {
+        Document projection = new Document("_id", 1).append("url", 1).append("links", 1);
+        return docsCollections.find().projection(projection).into(new ArrayList<>());
+    }
+    public void savePageRanks(Map<String, Double> pageRanks) {
+//        System.out.println("[PageRankCalculator] Saving PageRanks to database...");
+        double totalSum = pageRanks.values().stream().mapToDouble(Double::doubleValue).sum();
+        pageRanks.replaceAll((id, rank) -> rank / totalSum);
+
+        List<WriteModel<Document>> bulkUpdates = new ArrayList<>();
+
+        for (Map.Entry<String, Double> entry : pageRanks.entrySet()) {
+            String pageId = entry.getKey();
+            Double pageRank = entry.getValue();
+            bulkUpdates.add(new UpdateOneModel<>(
+                    new Document("_id", new ObjectId(pageId)),
+                    new Document("$set", new Document("popularity", pageRank))
+            ));
+        }
+
+        if (!bulkUpdates.isEmpty()) {
+            try {
+                docsCollections.bulkWrite(bulkUpdates);
+            } catch (MongoBulkWriteException e) {
+//                System.err.println("[PageRankCalculator] Error during bulk write: " + e.getMessage());
+            }
+        }
+
+//        System.out.println("[PageRankCalculator] PageRanks saved successfully.");
+    }
 
     public void saveImages(List<Image> images) {
         if (images.isEmpty()) {
