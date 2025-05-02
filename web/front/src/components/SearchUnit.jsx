@@ -1,12 +1,15 @@
 import React, { useState, useRef } from "react";
 import { FaSearch, FaCamera, FaMicrophone } from "react-icons/fa";
+import { useNavigate } from "react-router";
+
 function SearchUnit() {
+  const [searchQuery, setSearchQuery] = useState("");
+  const nav = useNavigate();
+
   const handleSearch = (e) => {
     e.preventDefault();
-    console.log("Searching for:", searchQuery);
+    nav(`/search?query=${searchQuery}`);
   };
-
-  const [searchQuery, setSearchQuery] = useState("");
 
   const fileInputRef = useRef(null);
 
