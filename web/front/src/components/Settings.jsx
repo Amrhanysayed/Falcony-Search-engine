@@ -12,6 +12,8 @@ function Settings() {
     setThemeColor,
   } = useSettings();
 
+  console.log(themeColor, "themeColor");
+
   return (
     <div className="absolute bottom-28 right-0 bg-white dark:bg-gray-800 text-black dark:text-white shadow-lg rounded-lg p-4 w-72">
       <h3 className="text-lg font-medium mb-3">Customize Falcony</h3>

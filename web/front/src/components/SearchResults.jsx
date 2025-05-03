@@ -4,7 +4,7 @@ import SearchItem from "./SearchItem";
 
 function SearchResults({ results = [] }) {
   return (
-    <div className="flex flex-col w-full max-w-3xl px-4 py-6">
+    <div className="flex flex-col  w-full px-4 py-6 ">
       {/* Results Count */}
       <p className="text-sm text-gray-500 mb-4">
         About {results.length} results

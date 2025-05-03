@@ -3,7 +3,7 @@ import { Search, ExternalLink } from "lucide-react";
 
 function SearchItem({ item }) {
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col  pb-4 mb-4">
       {/* URL/Source */}
       <div className="flex items-center mb-1">
         <span className="text-sm text-gray-600 truncate">

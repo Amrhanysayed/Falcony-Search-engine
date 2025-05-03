@@ -1,13 +1,21 @@
-import React, { useState } from "react";
-import { FaCog } from "react-icons/fa";
+import React, { useEffect, useState } from "react";
+
 import SearchUnit from "../components/SearchUnit";
 import Footer from "../components/Footer";
 import Settings from "../components/Settings";
 import { useSettings } from "../context/SettingsContext";
+import { useQuery } from "../context/QueryContext";
+import SettingButton from "../components/SettingButton";
 
 export default function Homepage() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const { themeColor } = useSettings();
+  console.log(themeColor, "themeColor from home page");
+  const { setSearchQuery } = useQuery();
+
+  useEffect(() => {
+    setSearchQuery("");
+  }, []);
 
   return (
     <div
@@ -27,15 +35,10 @@ export default function Homepage() {
 
       <SearchUnit />
 
-      <div className="absolute bottom-16 right-6 ">
-        <button
-          onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-          className="p-3 rounded-full shadow-md hover:shadow-lg transition-all"
-          title="Customize"
-        >
-          <FaCog size={20} />
-        </button>
-      </div>
+      <SettingButton
+        setIsSettingsOpen={setIsSettingsOpen}
+        isSettingsOpen={isSettingsOpen}
+      />
 
       {isSettingsOpen && <Settings />}
 

@@ -1,11 +1,23 @@
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import SearchUnit from "../components/SearchUnit";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import SearchResults from "../components/SearchResults";
+import Pagination from "../components/Pagination";
+import Footer from "../components/Footer";
+import SettingButton from "../components/SettingButton";
+import Settings from "../components/Settings";
+import { useSettings } from "../context/SettingsContext";
 
 const Results = () => {
   const [searchParams] = useSearchParams();
+  const [page, setPage] = useState(1); /// i will send the total number of pages to compoent
   const query = searchParams.get("query");
+  console.log(query);
+
+  const { themeColor } = useSettings();
+
+  const totalPages = 10; // to be change to the length of the results array
+
   const [searchResults, setSearchResults] = useState([
     {
       title: "Example Search Result",
@@ -33,17 +45,40 @@ const Results = () => {
     },
   ]);
 
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
   return (
     <>
-      <div className="flex items-center justify-center gap-24">
-        <img
-          src="./src/assets/Falcony_logo.png"
-          alt="Logo"
-          className="w-[92px] h-[92px]"
-        />
-        <SearchUnit />
+      <div
+        className="  min-h-screen "
+        style={{ backgroundColor: themeColor + "20" }}
+      >
+        <div className="flex items-center justify-center gap-24">
+          <Link to="/">
+            <img
+              src="./src/assets/Falcony_logo.png"
+              alt="Logo"
+              className="w-[92px] h-[92px]"
+            />
+          </Link>
+          <SearchUnit />
+        </div>
+
+        <div className=" flex flex-col mt-4  gap-12">
+          <SearchResults results={searchResults} />
+
+          <Pagination page={page} setPage={setPage} totalPages={totalPages} />
+        </div>
       </div>
-      <SearchResults results={searchResults} />
+
+      <SettingButton
+        setIsSettingsOpen={setIsSettingsOpen}
+        isSettingsOpen={isSettingsOpen}
+      />
+
+      {isSettingsOpen && <Settings setIsSettingsOpen={setIsSettingsOpen} />}
+
+      <Footer />
     </>
   );
 };

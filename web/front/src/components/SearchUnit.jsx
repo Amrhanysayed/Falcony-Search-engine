@@ -1,9 +1,11 @@
-import React, { useState, useRef } from "react";
+import React, { useRef } from "react";
 import { FaSearch, FaCamera, FaMicrophone } from "react-icons/fa";
 import { useNavigate } from "react-router";
+import { useQuery } from "../context/QueryContext";
 
 function SearchUnit() {
-  const [searchQuery, setSearchQuery] = useState("");
+  const { searchQuery, setSearchQuery } = useQuery();
+
   const nav = useNavigate();
 
   const handleSearch = (e) => {
@@ -18,11 +20,9 @@ function SearchUnit() {
   };
 
   const handleFileChange = (e) => {
-    // Handle the file upload logic here
     const file = e.target.files[0];
     if (file) {
       console.log("Image selected:", file.name);
-      // You would typically process the image here
     }
   };
 
@@ -31,7 +31,10 @@ function SearchUnit() {
       <form onSubmit={handleSearch} className="relative">
         <div className="flex items-center w-full bg-white rounded-full shadow-md hover:shadow-lg transition-shadow border border-gray-300">
           <div className="pl-4 text-gray-500">
-            <FaSearch />
+            <FaSearch
+              onClick={handleSearch}
+              className="cursor-pointer hover:text-blue-600 transition-colors"
+            />
           </div>
 
           <input
