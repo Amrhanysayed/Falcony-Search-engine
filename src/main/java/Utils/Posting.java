@@ -1,26 +1,32 @@
 package Utils;
 
 import java.util.List;
+import java.util.Map;
 
 public class Posting {
-    int frequency;
-    private List<Integer> positions;
+    private Map<String, Integer> freqs;
     public String docId;
 
-    public Posting(String token, int frequency, String docId, List<Integer> positions) {
-        this.frequency = frequency;
-        this.positions = positions;
+    /*
+        count in title
+        count in headers (h1, h2)
+        count in meta
+        count in body
+     */
+
+    public Posting(String token, String docId, Map<String, Integer> freqs) {
+        this.freqs = freqs;
         this.docId = docId;
     }
 
-    public List<Integer> getPositions() {
-        return positions;
+    public Map<String, Integer> getFrequencies() {
+        return freqs;
     }
-    public void addPosition(int position) {
-        this.positions.add(position);
+    public void setFrequency(String key, int frequency) {
+        freqs.putIfAbsent(key, frequency);
     }
-    public int getFrequency() {
-        return frequency;
+    public int getFrequency(String key) {
+        return freqs.getOrDefault(key, 0);
     }
 
     public String getDocId() {
@@ -28,7 +34,6 @@ public class Posting {
     }
 
     public void setTokenInfo(Posting tInfo) {
-        this.frequency = tInfo.frequency;
-        this.positions = tInfo.positions;
+        this.freqs = tInfo.freqs;
     }
 }

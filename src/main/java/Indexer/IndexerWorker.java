@@ -14,6 +14,6 @@ public class IndexerWorker implements Runnable {
     @Override
     public void run() {
         System.out.println("indexing document: " + document.getId());
-        Indexer.indexDocument(document, tokenizer);
+        TextIndexer.indexDocument(document, tokenizer);
     }
 }

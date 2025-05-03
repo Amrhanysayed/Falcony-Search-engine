@@ -1,8 +1,14 @@
 package Utils;
 
 import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class WebDocument {
     public final String docId; // Made final for immutability
@@ -10,6 +16,7 @@ public class WebDocument {
     public int popularity;
     public int[] children;
     private List<String> images;
+    private Document parsedDocument; // Cache the parsed document for better performance
 
     public WebDocument(String docId, String url, String title, String html, int popularity, int[] children) {
         this.docId = docId;
@@ -37,6 +44,14 @@ public class WebDocument {
         this.images = images;
     }
 
+    // Get the parsed document, creating it if necessary
+    private Document getParsedDocument() {
+        if (parsedDocument == null && html != null) {
+            parsedDocument = Jsoup.parse(html);
+        }
+        return parsedDocument;
+    }
+
     public String getId() {
         return docId;
     }
@@ -49,12 +64,50 @@ public class WebDocument {
         return popularity;
     }
 
+    // Updated to use parsed document
     public String getTitle() {
         return title;
     }
 
+    // Get HTML content
+    public String getHTML() {
+        return html;
+    }
+
+    // Get content of all h1 elements
+    public List<String> getH1s() {
+        List<String> h1Texts = new ArrayList<>();
+        Document doc = getParsedDocument();
+
+        if (doc != null) {
+            Elements h1Elements = doc.body().select("h1");
+            for (Element h1 : h1Elements) {
+                h1Texts.add(h1.text());
+            }
+        }
+        return h1Texts;
+    }
+
+    // Get content of all h2 elements
+    public List<String> getH2s() {
+        List<String> h2Texts = new ArrayList<>();
+        Document doc = getParsedDocument();
+
+        if (doc != null) {
+            Elements h2Elements = doc.body().select("h2");
+            for (Element h2 : h2Elements) {
+                h2Texts.add(h2.text());
+            }
+        }
+        return h2Texts;
+    }
+
     public String getSoupedContent() {
-        return Jsoup.parse(html).text().replaceAll("\\s+", " ").trim();
+        Document doc = getParsedDocument();
+        if (doc != null) {
+            return doc.text().replaceAll("\\s+", " ").trim();
+        }
+        return "";
     }
 
     public List<String> getImages() {

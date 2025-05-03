@@ -140,20 +140,35 @@ public class dbManager {
     }
 
     // Get documents with 'indexed' == false
-    public ConcurrentHashMap<String, WebDocument> getNonIndexedDocuments(int limit) {
+    public ConcurrentHashMap<String, WebDocument> getNonIndexedDocuments(int limit, boolean isImages) {
         ConcurrentHashMap<String, WebDocument> docs = new ConcurrentHashMap<>();
+        String flag_filter = isImages ? "images_indexed" : "indexed";
+
+        // Create the projection to include/exclude fields
+        Document projection = new Document()
+                .append("_id", 1)
+                .append("url", 1)
+                .append("title", 1)
+                .append("content", 1);
+
+        // Only include the images field if isImages is true
+        if (isImages) {
+            projection.append("images", 1);
+        }
 
         FindIterable<Document> results = docsCollections.find(
-                Filters.eq("indexed", false)
-        ).limit(limit);
+                        Filters.eq(flag_filter, false)
+                )
+                .projection(projection)
+                .limit(limit);
 
         for (Document doc : results) {
             String url = doc.getString("url");
             String title = doc.getString("title");
             String content = doc.getString("content");
             String id = doc.getObjectId("_id").toString();
-            boolean indexed = doc.getBoolean("indexed", false);
-            List<String> images = doc.getList("images", String.class);
+            // Get images only if isImages is true; otherwise, use null or empty list
+            List<String> images = isImages ? doc.getList("images", String.class) : null;
 
             WebDocument webDoc = new WebDocument(id, url, title, content, images);
             docs.put(id, webDoc);
@@ -163,13 +178,15 @@ public class dbManager {
     }
 
     // Mark a document as indexed
-    public void markAsIndexed(List<String> ids) {
+    public void markAsIndexed(List<String> ids, boolean isImages) {
         List<ObjectId> objectIds = ids.stream()
                 .map(ObjectId::new)
                 .collect(Collectors.toList());
 
+        String flag_filter = isImages ? "images_indexed" : "indexed";
+
         Document filter = new Document("_id", new Document("$in", objectIds));
-        Document update = new Document("$set", new Document("indexed", true));
+        Document update = new Document("$set", new Document(flag_filter, true));
         docsCollections.updateMany(filter, update);
     }
 
@@ -186,13 +203,12 @@ public class dbManager {
                 // Create updates for each TermInfo
                 for (Posting posting : terms) {
                     String docId = posting.getDocId();
-                    int frequency = posting.getFrequency();
-                    List<Integer> positions = posting.getPositions().stream().distinct().toList();
+                    Map<String, Integer> positions = posting.getFrequencies(); // Get the map of positions by section
                     ObjectId id = new ObjectId(docId);
-                    // Create document info
+
+                    // Create document info with the positions map instead of frequency and positions list
                     Document docInfo = new Document("docId", id)
-                            .append("frequency", frequency)
-                            .append("positions", positions);
+                            .append("positions", new Document(positions));
 
                     // Create UpdateOneModel for this TermInfo
                     UpdateOneModel<Document> update = new UpdateOneModel<>(
@@ -287,12 +303,17 @@ public class dbManager {
                             Document docInfo = (Document) entry.getValue();
 
                             // Create TokenInfo
-                            Posting posting = new Posting(
-                                    token,
-                                    docInfo.getInteger("frequency", 0),
-                                    docId,
-                                    docInfo.getList("positions", Integer.class, new ArrayList<>())
-                            );
+                            Document positionsDoc = docInfo.get("positions", Document.class);
+                            Map<String, Integer> freqs = new HashMap<>();
+                            if (positionsDoc != null) {
+                                for (String key : positionsDoc.keySet()) {
+                                    Object value = positionsDoc.get(key);
+                                    if (value instanceof Integer) {
+                                        freqs.put(key, (Integer) value);
+                                    }
+                                }
+                            }
+                            Posting posting = new Posting(token, docId, freqs);
                             postings.add(posting);
                         }
                     }
@@ -464,10 +485,4 @@ public class dbManager {
         }
     }
 
-    public static void main(String[] args) {
-        dbManager DBM = new dbManager();
-        ArrayList<String> ids = new ArrayList<>(Arrays.asList("6803adf92a5a8a19e97290b7", "6803adf92a5a8a19e97290b8"));
-        DBM.markAsIndexed(ids);
-        DBM.close();
-    }
 }
