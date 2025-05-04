@@ -1,5 +1,6 @@
-package ImageSearching;
+package Backend;
 
+import ImageSearching.ImageFeatureExtractor;
 import ai.onnxruntime.OrtException;
 import com.mongodb.client.AggregateIterable;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,10 +20,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 @Service
@@ -34,11 +33,11 @@ public class ImageSearchService {
     @Autowired
     private ImageRepository imageRepository;
 
-    @Autowired
     private ImageFeatureExtractor featureExtractor;
 
     @PostConstruct
-    public void createIndexes() {
+    public void createIndexes() throws IOException, OrtException {
+        featureExtractor = new ImageFeatureExtractor();
         // Create indexes for efficient search
         mongoTemplate.indexOps("images").ensureIndex(
                 new Index().on("features", Sort.Direction.ASC)

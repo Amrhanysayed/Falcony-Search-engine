@@ -31,7 +31,7 @@
       formData.append('file', input.files[0]);
 
       try {
-        const response = await fetch('http://localhost:8080/search', {
+        const response = await fetch('http://localhost:8080/search_images', {
           method: 'POST',
           body: formData
         });

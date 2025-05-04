@@ -3,91 +3,51 @@ package Ranker;
 import Utils.Posting;
 import Utils.WebDocument;
 import dbManager.dbManager;
-
-import Utils.Tokenizer;
 import java.util.*;
 
 public class TokenBasedRanker implements Ranker {
 
-
     private dbManager db;
-    Tokenizer tokenizer;
+    private final double popularityAlpha;
+    private final Helpers.WeightConfig weightConfig;
 
-
-    private final int popularityAlpha ;
-    public TokenBasedRanker(int popularityAlpha ) throws Exception {
-        this.popularityAlpha = popularityAlpha;
-        db = new dbManager();
-        tokenizer = new Tokenizer();
+    public TokenBasedRanker(double popularityAlpha) throws Exception {
+        this(popularityAlpha, new Helpers.WeightConfig(1.0, 1.5, 1.3, 1.2)); // Default weights
     }
 
+    public TokenBasedRanker(double popularityAlpha, Helpers.WeightConfig weightConfig) throws Exception {
+        this.popularityAlpha = popularityAlpha;
+        this.weightConfig = weightConfig;
+        this.db = new dbManager();
+    }
 
     @Override
-    public List<WebDocument> rank(List<String> tokens, Set<String> candidateDocsIds , String logicalOperator) {
-//
-//        Map<String, Double> docScores = new HashMap<>();
-//        Integer totalDocCount = candidateDocsIds.size();
-//        if (totalDocCount == 0) {
-//            return new ArrayList<>();
-//        }
-//
-//        Map<String, List<Posting>> tokenToPostings =  db.getPostingsForTokens(tokens , candidateDocsIds);
-//        Map<String , WebDocument> candidateDocs = db.getDocumentsByIds(candidateDocsIds);
-//
-//        for (String token : tokens) {
-//            List<Posting> postings = tokenToPostings.get(token);
-//            int df = postings.size();
-//            if (df == 0) continue; // Safe Check
-//
-//            double idf = Math.log(totalDocCount  / df);
-//
-//            for (Posting post : postings)
-//            {
-//                String docId = post.getDocId();
-//                WebDocument doc = candidateDocs.get(docId);
-//                int tf = post.getFrequency();
-//                double score = TF_IDF(tf , idf );
-//
-//                if (doc != null && titleContainsToken(doc.getTitle(), token)) {
-//                    score *= 1.5;
-//                }
-//
-//                double popScore = 0; // TODO get actual pop
-//                double finalScore = score + popularityAlpha * popScore;
-//
-//                docScores.put(docId , docScores.getOrDefault(docId , 0.0) + finalScore);
-//
-//            }
-//
-//        }
-//
-//        return docScores.entrySet().stream()
-//                .sorted((a, b) -> Double.compare(b.getValue(), a.getValue()))
-//                .map(entry -> candidateDocs.get(entry.getKey()))
-//                .toList();
-        return new ArrayList<>();
-    }
+    public List<WebDocument> rank(List<String> queryTexts, List<String> tokens, List<String> tokensSecond, Set<String> candidateDocsIds, String logicalOperator) {
 
-    private double TF_IDF(int tf , double idf)
-    {
-        // Logged tf / idf
-        double tfLog = Math.log(tf + 1);  // Apply log to term frequency (log(tf + 1))
-        double result = tfLog * idf;       // Multiply by idf, which is typically log(N / df)
-        return result;
-    }
-
-    private boolean titleContainsToken(String title, String token) {
-        if (title == null) return false;
-        title = title.toLowerCase().trim();
-        List<String> titleTokens = tokenizer.Tokenize(title);
-        token = token.toLowerCase();
-        for (String t : titleTokens) {
-            if (t.equals(token)) {
-                return true;
-            }
+        Integer totalDocCount = db.getTotalDocCount();
+        if (totalDocCount == 0) {
+            return new ArrayList<>();
         }
-        return false;
+
+        // Combine tokensFirst and tokensSecond without duplicates
+        Set<String> combinedTokensSet = new HashSet<>(tokens);
+        if (tokensSecond != null) {
+            combinedTokensSet.addAll(tokensSecond);
+        }
+        List<String> combinedTokens = new ArrayList<>(combinedTokensSet);
+
+        Map<String, List<Posting>> tokenToPostings = db.getPostingsForTokens(combinedTokens, candidateDocsIds);
+        Map<String, WebDocument> candidateDocs = db.getDocumentsByIds(candidateDocsIds);
+
+        // Get relevance scores - pass weightConfig
+        Map<String, Double> docScores = Helpers.RelevanceScore(combinedTokens, tokenToPostings, totalDocCount, candidateDocs, weightConfig);
+
+        // Apply popularity adjustment
+        docScores = Helpers.ApplyPopularityScore(docScores, candidateDocs, popularityAlpha);
+
+        return docScores.entrySet().stream()
+                .sorted((a, b) -> Double.compare(b.getValue(), a.getValue()))
+                .map(entry -> candidateDocs.get(entry.getKey()))
+                .toList();
     }
-
-
 }

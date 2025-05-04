@@ -13,8 +13,8 @@ public class RankerContext  {
         this.ranker = r;
     }
 
-    public List<WebDocument> rank(List<String> queryTerms, Set<String> candidateDocsIds , String logicalOperator) {
-        return ranker.rank(queryTerms, candidateDocsIds , logicalOperator);
+    public List<WebDocument> rank(List<String> queryTexts , List<String> tokensFirst , List<String> tokensSecond, Set<String> candidateDocsIds , String logicalOperator) {
+        return ranker.rank(queryTexts,tokensFirst , tokensSecond, candidateDocsIds , logicalOperator);
     }
 
 

@@ -1,17 +1,14 @@
 package ImageSearching;
 
 import ai.onnxruntime.*;
-import org.springframework.stereotype.Service;
 
-import javax.annotation.PostConstruct;
 import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.*;
 import java.util.Collections;
-import java.util.Map;
 
-@Service
+
 public class ImageFeatureExtractor {
 
     private OrtEnvironment env;
@@ -20,8 +17,7 @@ public class ImageFeatureExtractor {
     private static final int WIDTH = 224;
     private static final int HEIGHT = 224;
 
-    @PostConstruct
-    public void init() throws OrtException, IOException {
+    public ImageFeatureExtractor() throws OrtException, IOException {
         env = OrtEnvironment.getEnvironment();
         String modelPath = "src/main/resources/models/model.onnx"; // Adjust to your actual path
         session = env.createSession(modelPath, new OrtSession.SessionOptions());

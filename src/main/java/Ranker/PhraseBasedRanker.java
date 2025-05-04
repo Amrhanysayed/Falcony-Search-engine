@@ -1,97 +1,95 @@
 package Ranker;
+
+import Utils.Posting;
 import Utils.WebDocument;
 import dbManager.dbManager;
-import org.slf4j.Logger;
-import java.util.regex.*;
-import org.slf4j.LoggerFactory;
-
 import java.util.*;
+import java.util.regex.*;
 
 public class PhraseBasedRanker implements Ranker {
-
-    private static final Logger log = LoggerFactory.getLogger(PhraseBasedRanker.class);
-    private final int popularityAlpha ;
+    private final double popularityAlpha;
+    private final Helpers.WeightConfig weightConfig;
     private dbManager db;
-    private final Map<String, Double> sectionWeights; // TODO use it parsing HTML content
 
-    public PhraseBasedRanker(int popularityAlpha) {
-        this.popularityAlpha = popularityAlpha;
-        db = new dbManager();
-        this.sectionWeights = Map.of( // TODO cinder using it instead of defualt weight 1.0
-        "title", 2.0,
-        "h1", 1.5,
-        "body", 1.0,
-        "meta", 1.2
-        );
+    public PhraseBasedRanker(double popularityAlpha) throws Exception {
+        this(popularityAlpha, new Helpers.WeightConfig(1.0, 1.5, 1.3, 1.2)); // Default weights
     }
 
+    public PhraseBasedRanker(double popularityAlpha, Helpers.WeightConfig weightConfig) throws Exception {
+        this.popularityAlpha = popularityAlpha;
+        this.weightConfig = weightConfig;
+        this.db = new dbManager();
+    }
 
     @Override
-    public List<WebDocument> rank(List<String> queryTexts, Set<String> candidateDocsIds , String logicalOperator) {
+    public List<WebDocument> rank(List<String> queryTexts, List<String> tokensFirst, List<String> tokensSecond,
+                                  Set<String> candidateDocsIds, String logicalOperator) {
+        // sort return
+        String firstPhrase = queryTexts.get(0).toLowerCase();
+        String secondPhrase = logicalOperator.isEmpty() ? "" : queryTexts.get(1).toLowerCase();
 
-        Map<String, Double> docScores = new HashMap<>();
-        Map<String, WebDocument> candidateDocs = db.getDocumentsByIds(candidateDocsIds);
+        // First Filter Operators and Not existing
+        Set<String> filteredCandidateIds = FilterCandidates(firstPhrase, logicalOperator, secondPhrase, candidateDocsIds);
 
-
-        String firstPhrase = queryTexts.get(0);
-        String secondPhrase = logicalOperator.isEmpty() ? "" : queryTexts.get(1);
-
-        if (queryTexts.size() < 1 || (!logicalOperator.isEmpty() && queryTexts.size() != 2)) {
-            throw new IllegalArgumentException("Invalid query format: expected one or two quoted phrases depending on the logical operator.");
+        Integer totalDocCount = db.getTotalDocCount();
+        if (totalDocCount == 0) {
+            return new ArrayList<>();
         }
 
-        for (WebDocument doc : candidateDocs.values()) {
-
-            String content = doc.getSoupedContent().toLowerCase();
-            int countFirst = countPhraseOccurrences(firstPhrase.toLowerCase(), content);
-            if (countFirst == 0 && !logicalOperator.equals("or")) {continue;} // early exit
-
-            double phraseScoreFirst = 1.0 * countFirst + 2.0 * countPhraseOccurrences(firstPhrase.toLowerCase() , doc.getTitle().toLowerCase());
-            double finalScore = phraseScoreFirst ;
-
-            if (!logicalOperator.isEmpty())
-            {
-                if (logicalOperator.equals("not"))
-                {
-                    if (content.contains(secondPhrase.toLowerCase()))
-                    {
-                        System.out.println(doc.getId());
-                        continue;
-                    }
-                }
-                else
-                {
-                    int countSecond = countPhraseOccurrences(secondPhrase.toLowerCase(), content);
-                    double phraseScoreSecond = 1.0 * countSecond +  2.0 * countPhraseOccurrences(secondPhrase.toLowerCase() , doc.getTitle().toLowerCase());
-
-                    if (logicalOperator.equals("and") && countSecond == 0)
-                        continue;
-
-                    if (logicalOperator.equals("or") && (countSecond + countFirst) == 0)
-                        continue;
-
-                    finalScore = phraseScoreFirst + phraseScoreSecond; // ASSUME AND , OR both sum scores
-
-                }
-            }
-
-            finalScore += popularityAlpha * doc.getPopularity() ;
-            String docId = doc.getId();
-            docScores.put(docId, docScores.getOrDefault(docId, 0.0) + finalScore);
-
+        // Combine tokens without duplicates
+        Set<String> combinedTokensSet = new HashSet<>(tokensFirst);
+        if (tokensSecond != null) {
+            combinedTokensSet.addAll(tokensSecond);
         }
+        List<String> combinedTokens = new ArrayList<>(combinedTokensSet);
+
+        // Apply TF_IDF
+        Map<String, List<Posting>> tokenToPostings = db.getPostingsForTokens(combinedTokens, filteredCandidateIds);
+        Map<String, WebDocument> filteredDocs = db.getDocumentsByIds(filteredCandidateIds);
+
+        // Get relevance scores - pass weightConfig
+        Map<String, Double> docScores = Helpers.RelevanceScore(combinedTokens, tokenToPostings, totalDocCount, filteredDocs, weightConfig);
+
+        // Apply phrase boost for titles
+        for (WebDocument doc : filteredDocs.values()) {
+            double titleCount = countPhraseOccurrences(firstPhrase, doc.getTitle()) +
+                    (secondPhrase.isEmpty() ? 0 : countPhraseOccurrences(secondPhrase, doc.getTitle()));
+
+            // Use the same weight from weightConfig for title boost
+            docScores.put(doc.getId(), docScores.getOrDefault(doc.getId(), 0.0) +
+                    titleCount * weightConfig.titleWeight);
+        }
+
+        // Apply popularity adjustment
+        docScores = Helpers.ApplyPopularityScore(docScores, filteredDocs, popularityAlpha);
 
         return docScores.entrySet().stream()
                 .sorted((a, b) -> Double.compare(b.getValue(), a.getValue()))
-                .map(entry -> candidateDocs.get(entry.getKey()))
+                .map(entry -> filteredDocs.get(entry.getKey()))
                 .toList();
     }
 
+    Set<String> FilterCandidates(String firstPhrase, String logicalOperator, String secondPhrase, Set<String> candidateDocsIds) {
+        Set<String> filteredDocsIds = db.FilterDocsIdsByPhrase(candidateDocsIds, firstPhrase);
+        if (filteredDocsIds.size() == 0 && !logicalOperator.equals("or"))
+            return new HashSet<String>();
+        else if (logicalOperator.equals("or"))
+            filteredDocsIds.addAll(db.FilterDocsIdsByPhrase(candidateDocsIds, secondPhrase));
+        else if (logicalOperator.equals("and"))
+            filteredDocsIds.retainAll(db.FilterDocsIdsByPhrase(candidateDocsIds, secondPhrase));
+        else if (logicalOperator.equals("not"))
+            filteredDocsIds.removeAll(db.FilterDocsIdsByPhrase(candidateDocsIds, secondPhrase));
+
+        return filteredDocsIds;
+    }
 
     private int countPhraseOccurrences(String phrase, String content) {
+        if (phrase == null || phrase.isEmpty() || content == null) {
+            return 0;
+        }
+
         int count = 0;
-        String regex = "(^|\\b)" + Pattern.quote(phrase) + "(?=$|\\b)"; // handle punctuation , start , end , ..etc
-        // TODO consider assumption for hyphen seperated ?
+        String regex = "(^|\\b)" + Pattern.quote(phrase) + "(?=$|\\b)";
         Pattern pattern = Pattern.compile(regex);
         Matcher matcher = pattern.matcher(content);
 
@@ -100,6 +98,4 @@ public class PhraseBasedRanker implements Ranker {
         }
         return count;
     }
-
-
 }

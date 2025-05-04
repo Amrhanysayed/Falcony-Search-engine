@@ -1,4 +1,4 @@
-package ImageSearching;
+package Backend;
 
 import org.springframework.data.mongodb.repository.MongoRepository;
 

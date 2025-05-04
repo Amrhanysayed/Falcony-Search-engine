@@ -7,12 +7,6 @@ public class Posting {
     private Map<String, Integer> freqs;
     public String docId;
 
-    /*
-        count in title
-        count in headers (h1, h2)
-        count in meta
-        count in body
-     */
 
     public Posting(String token, String docId, Map<String, Integer> freqs) {
         this.freqs = freqs;
