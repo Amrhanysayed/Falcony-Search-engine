@@ -43,3 +43,5 @@ bin/
 .env
 web/front/.vite/deps/_metadata.json
 web/front/.vite/deps/package.json
+/db
+/src/main/resources/models
