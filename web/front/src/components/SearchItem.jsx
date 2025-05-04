@@ -1,7 +1,21 @@
 import React from "react";
 import { Search, ExternalLink } from "lucide-react";
+import { useSearchParams } from "react-router";
+
+function highlightMatch(text, query) {
+  if (!query) return text;
+
+  const regex = new RegExp(`(${query})`, "gi");
+  const parts = text.split(regex);
+
+  return parts.map((part, i) =>
+    regex.test(part) ? <strong key={i}>{part}</strong> : part
+  );
+}
 
 function SearchItem({ item }) {
+  const [searchParams] = useSearchParams();
+  const query = searchParams.get("query");
   return (
     <div className="flex flex-col  pb-4 mb-4">
       {/* URL/Source */}
@@ -19,7 +33,9 @@ function SearchItem({ item }) {
       </a>
 
       {/* Description */}
-      <p className="text-sm text-gray-800">{item.description}</p>
+      <p className="text-sm text-gray-800">
+        {highlightMatch(item.description, query)}
+      </p>
 
       {/* Additional links if available */}
       {/* {item.sublinks && (
