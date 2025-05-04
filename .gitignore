@@ -41,5 +41,7 @@ bin/
 ### Mac OS ###
 .DS_Store
 .env
-/src/main/resources/models
+web/front/.vite/deps/_metadata.json
+web/front/.vite/deps/package.json
 /db
+/src/main/resources/models
