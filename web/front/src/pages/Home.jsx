@@ -26,11 +26,8 @@ export default function Homepage() {
         <img
           src="../../src/assets/Falcony_logo.png"
           alt="Falcony Logo"
-          className="size-[200px] mb-4"
+          className="size-[200px]"
         />
-        <span className="text-lg font-medium" style={{ color: themeColor }}>
-          Your AI-Powered Search Engine
-        </span>
       </div>
 
       <SearchUnit />

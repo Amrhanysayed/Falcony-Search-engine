@@ -101,12 +101,12 @@ const Results = () => {
         className="  min-h-screen "
         style={{ backgroundColor: themeColor + "20" }}
       >
-        <div className="flex items-center justify-center gap-24">
+        <div className="flex items-center justify-center gap-6">
           <Link to="/">
             <img
               src="./src/assets/Falcony_logo.png"
               alt="Logo"
-              className="w-[92px] h-[92px]"
+              className="w-[100px] h-[100px]"
             />
           </Link>
           <SearchUnit />

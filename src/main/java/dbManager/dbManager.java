@@ -41,7 +41,7 @@ public class dbManager {
     private final MongoCollection<Document> imageCollection;
     private final MongoCollection<Document> queryCollection;
 
-    private static final int BULK_WRITE_BATCH_SIZE = 2000;
+    private static final int BULK_WRITE_BATCH_SIZE = 2500;
 
     public dbManager() {
 

@@ -19,7 +19,7 @@ public class Crawler {
     private final ConcurrentLinkedQueue<String> urlsToCrawl = new ConcurrentLinkedQueue<>();
     private final Set<String> visited = ConcurrentHashMap.newKeySet();
     private final AtomicInteger pageCount = new AtomicInteger(0); /// thread safe int
-    private final int maxPages = 7000;
+    private final int maxPages = 8000;
     private final RobotsManager robotsM;
     private final ExecutorService executor;
     private final int numThreads = 10;

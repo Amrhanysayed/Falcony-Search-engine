@@ -61,14 +61,6 @@ function SearchUnit() {
             <button
               type="button"
               className="text-gray-500 hover:text-blue-600 transition-colors"
-              title="Search by voice"
-            >
-              <FaMicrophone />
-            </button>
-
-            <button
-              type="button"
-              className="text-gray-500 hover:text-blue-600 transition-colors"
               onClick={handleImageUpload}
               title="Search by image"
             >
