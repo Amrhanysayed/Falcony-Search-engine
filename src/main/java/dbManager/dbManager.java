@@ -363,8 +363,8 @@ public class dbManager {
         return docs;
     }
 
-    public Map<String , String> getListOfSnippets(List<WebDocument> docsList, String query, int snippet_length) {
-        Map<String , String> docs = new HashMap<>();
+    public Map<String , WebDocument> getSnippetsAndImages(List<WebDocument> docsList, String query, int snippet_length) {
+        Map<String , WebDocument> docs = new HashMap<>();
 
         List<ObjectId> objectIds = docsList.stream()
                 .map(doc -> new ObjectId(doc.getId()))
@@ -372,11 +372,14 @@ public class dbManager {
 
         System.out.println("WHERE IS MY CANDODO 2");
         for (Document doc : docsCollections.find(Filters.in("_id", objectIds)).projection(
-                Projections.include("_id", "content"))) {
+                Projections.include("_id", "content", "images"))) {
             String id = doc.getObjectId("_id").toString();
             String content = doc.getString("content");
+            List<String> images = doc.getList("images", String.class);
+            String snippet = SnippetGenerator.getSnippet(content, query, snippet_length);
+            WebDocument webdoc = new WebDocument(id, "", "", snippet, images);
 
-            docs.put(id , SnippetGenerator.getSnippet(content, query, snippet_length));
+            docs.put(id , webdoc);
         }
 
         return docs;

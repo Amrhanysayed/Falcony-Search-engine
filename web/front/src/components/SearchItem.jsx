@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router";
 
 
 function highlightMatch(text, query) {
+  if (!text) return null;
   if (!query) return text;
 
   // Remove special characters from query and split into individual words

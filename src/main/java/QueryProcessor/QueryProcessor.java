@@ -138,11 +138,13 @@ public class QueryProcessor {
         int toIndex = Math.min(fromIndex + limit, Results.size());
         Results = Results.subList(fromIndex, toIndex);
 
-        Map<String, String> snippets = db.getListOfSnippets(Results, query, SNIPPETS_LENGTH);
+        Map<String, WebDocument> data = db.getSnippetsAndImages(Results, query, SNIPPETS_LENGTH);
         for (WebDocument doc : Results) {
             System.out.println();
             doc.Print();
-            doc.setSnippet(snippets.getOrDefault(doc.getId(), ""));
+            WebDocument dataDoc = data.get(doc.getId());
+            doc.setSnippet(dataDoc.getHTML());
+            doc.setImages(dataDoc.getImages());
         }
 
         return new ResultsResponse(count, Results);

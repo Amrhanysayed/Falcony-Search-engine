@@ -123,6 +123,10 @@ public class WebDocument {
         return images;
     }
 
+    public void setImages(List<String> images) {
+        this.images = images;
+    }
+
     public String getSnippet() {
         return snippet;
     }

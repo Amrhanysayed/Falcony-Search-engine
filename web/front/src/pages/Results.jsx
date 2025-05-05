@@ -83,11 +83,9 @@ const Results = () => {
             <Loading />
           ) : (
             <>
-              {status === "all" ? (
-                <SearchResults results={searchResults} timeTaken={timeTaken} />
-              ) : (
-                <ImageSearchResult results={searchResults} />
-              )}
+                <SearchResults results={searchResults} timeTaken={timeTaken} status={status} />
+                <ImageSearchResult results={searchResults} status={status}  />
+            
 
               <Pagination
                 page={page}

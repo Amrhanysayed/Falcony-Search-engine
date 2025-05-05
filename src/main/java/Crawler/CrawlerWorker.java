@@ -136,11 +136,8 @@ public class CrawlerWorker implements Runnable {
           String imageUrl = image.absUrl("src");
           if (imageUrl.isEmpty()) continue;
 
-          String normalizedImageUrl = crawler.normalizeUrl(imageUrl, url);
-          if (normalizedImageUrl != null) {
-            imageUrls.add(normalizedImageUrl);
-            imageCount++;
-          }
+          imageUrls.add(imageUrl);
+          imageCount++;
         }
 
         // Create document and add to queue
