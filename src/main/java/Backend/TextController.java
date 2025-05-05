@@ -1,12 +1,17 @@
 package Backend;
 
-import ImageSearching.ImageFeatureExtractor;
+import java.util.List;
+
+import javax.annotation.PostConstruct;
+
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
 import QueryProcessor.QueryProcessor;
 import Utils.WebDocument;
-import ai.onnxruntime.OrtException;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
+
 
 import javax.annotation.PostConstruct;
 import java.io.IOException;
@@ -29,4 +34,11 @@ public class TextController {
         System.out.println("page: " + page);
         return queryProcessor.process(queryValue, page, limit);
     }
+    @CrossOrigin(origins = "*")
+    @GetMapping("/suggestions")
+    public List<String> handleSuggestions(@RequestParam(name = "query") String queryValue) throws Exception {
+        System.out.println("query: " + queryValue);
+        return queryProcessor.getSuggestions(queryValue);
+    }
+
 }

@@ -1,23 +1,32 @@
 package dbManager;
 
-import Backend.Image;
-import Utils.Posting;
-import Utils.WebDocument;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Queue;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
+import org.bson.Document;
+import org.bson.types.ObjectId;
+import org.springframework.data.mongodb.core.index.Index;
+
 import com.mongodb.ConnectionString;
 import com.mongodb.MongoBulkWriteException;
 import com.mongodb.MongoClientSettings;
 import com.mongodb.bulk.BulkWriteError;
 import com.mongodb.client.*;
 import com.mongodb.client.model.*;
-import io.github.cdimascio.dotenv.Dotenv;
-import org.bson.Document;
-import org.bson.types.ObjectId;
 
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
+import Backend.Image;
+import Utils.Posting;
+import Utils.WebDocument;
+import io.github.cdimascio.dotenv.Dotenv;
 
 public class dbManager {
     private static final Dotenv dotenv = Dotenv.load();
@@ -35,23 +44,28 @@ public class dbManager {
     private final MongoCollection<Document> docsCollections;
     private final MongoCollection<Document> crawlerStateCollection;
     private final MongoCollection<Document> imageCollection;
+    private final MongoCollection<Document> queryCollection;
 
     private static final int BULK_WRITE_BATCH_SIZE = 1000;
 
     public dbManager() {
 
         mongoClient = MongoClients.create(getMongoClientSettings(CONNECTION_STRING));
-        MongoDatabase database = mongoClient.getDatabase("searchengine");
+        MongoDatabase database = mongoClient.getDatabase(DB_NAME);
 
         imagesMongoClient = MongoClients.create(getMongoClientSettings(IMAGES_CONNECTION_STRING));
 
-        database = mongoClient.getDatabase(DB_NAME);
+
         docsCollections = database.getCollection(COLLECTION_NAME);
         tokensCollection = database.getCollection("tokens");  // Renamed for proper casing
+        queryCollection = database.getCollection("queries");
 
         imagesDatabase = imagesMongoClient.getDatabase(DB_NAME);
         imageCollection = imagesDatabase.getCollection("images");
 
+
+        queryCollection.createIndex(Indexes.ascending("_id")); // Already exists for _id
+        queryCollection.createIndex(Indexes.text("_id")); // For text search
 
         crawlerStateCollection= database.getCollection("crawler_state");
         System.out.println("Connected to MongoDB Atlas.");
@@ -524,6 +538,26 @@ public class dbManager {
                 .append("_class", img.getClass().getName());
     }
 
+
+    public void addQuery(String query){
+        UpdateOptions options = new UpdateOptions().upsert(true);
+
+         queryCollection.updateOne(
+            Filters.eq("_id", query),
+            Updates.inc("count", 1),
+            options
+            );
+    }
+    
+    public List<String> getSuggestions(String prefix,int limit) {
+    return queryCollection.find(Filters.regex("_id", "^" + Pattern.quote(prefix), "i"))
+        .sort(Sorts.descending("count"))
+        .limit(limit)
+        .into(new ArrayList<>())
+        .stream()
+        .map(doc -> doc.getString("_id"))
+        .collect(Collectors.toList());
+    }
 
     // Close the database connection
     public void close() {

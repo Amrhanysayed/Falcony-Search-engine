@@ -16,6 +16,7 @@ public class QueryProcessor {
 
     dbManager db;
     Tokenizer tokenizer;
+    private static final int SUGGESTION_LIMIT = 10;
 
     public QueryProcessor() throws Exception {
         db = new dbManager();  // Fixed: Assign to instance variable, not local variable
@@ -24,13 +25,26 @@ public class QueryProcessor {
 
     public List<WebDocument> process(String query, Integer page, Integer docsPerPage) throws Exception {
         query = query.trim().toLowerCase(); // ALL COMING LOGIC IS BASED ON LOWERCASE
+        final String finalQuery = query;
         List<String> queryTexts = new ArrayList<>();
         Pattern pattern = Pattern.compile("\"([^\"]*)\"\\s*(AND|OR|NOT)\\s*\"([^\"]*)\"", Pattern.CASE_INSENSITIVE);
         boolean isUsingOperator = false;
         boolean isUsingPhrase = false;
         String operator = "";
         Matcher matcher = pattern.matcher(query);
-
+        
+        
+        // Add the query to the database in a separate thread
+        new Thread(() -> {
+            try {
+                db.addQuery(finalQuery); // Add the query to the database
+                System.out.println("Query added to the database: " + finalQuery);
+            } catch (Exception e) {
+                System.out.println("eRROr");
+                e.printStackTrace();
+            }
+        }).start();
+        
         // Check if the query contains a logical operator
         if (matcher.matches()) {
             // Add the first phrase to the query texts
@@ -121,7 +135,9 @@ public class QueryProcessor {
         return Results;
 
     }
-
+    public List<String> getSuggestions(String query) throws Exception {
+       return db.getSuggestions(query, SUGGESTION_LIMIT);
+    }
 
     public static void main(String[] args) throws Exception {
         QueryProcessor qp = new QueryProcessor();
