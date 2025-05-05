@@ -22,7 +22,7 @@ public class TokenBasedRanker implements Ranker {
     }
 
     @Override
-    public List<WebDocument> rank(List<String> queryTexts, List<String> tokens, List<String> tokensSecond, Set<String> candidateDocsIds, String logicalOperator) {
+    public List<WebDocument> rank(List<String> queryTexts, List<String> tokens, List<String> tokensSecond, Set<String> candidateDocsIds, String logicalOperator, Integer page, Integer docsPerPage) {
 
         Integer totalDocCount = db.getTotalDocCount();
         if (totalDocCount == 0) {
@@ -36,17 +36,47 @@ public class TokenBasedRanker implements Ranker {
         }
         List<String> combinedTokens = new ArrayList<>(combinedTokensSet);
 
+        double startTime = System.currentTimeMillis();
         Map<String, List<Posting>> tokenToPostings = db.getPostingsForTokens(combinedTokens, candidateDocsIds);
-        Map<String, WebDocument> candidateDocs = db.getDocumentsByIds(candidateDocsIds);
-
+        double endTime = System.currentTimeMillis();
+        double duration = (endTime - startTime) / 1000;
+        System.out.println("Get postings for tokens took " + duration + " seconds");
+        startTime = System.currentTimeMillis();
+        Map<String, WebDocument> candidateDocs = db.getDocumentsByIdsForRanking(candidateDocsIds);
+        endTime = System.currentTimeMillis();
+        duration = (endTime - startTime) / 1000;
+        System.out.println("Get docs by id took " + duration + " seconds");
         // Get relevance scores - pass weightConfig
         Map<String, Double> docScores = Helpers.RelevanceScore(combinedTokens, tokenToPostings, totalDocCount, candidateDocs, weightConfig);
+
+        for (Map.Entry<String, Double> entry : docScores.entrySet()) {
+            String docId = entry.getKey();
+            Double score = entry.getValue();
+            WebDocument document = candidateDocs.get(docId);
+            if (document != null) {
+                document.setTfScore(score); // Set the document score
+            }
+        }
 
         // Apply popularity adjustment
         docScores = Helpers.ApplyPopularityScore(docScores, candidateDocs, popularityAlpha);
 
+        for (Map.Entry<String, Double> entry : docScores.entrySet()) {
+            String docId = entry.getKey();
+            Double score = entry.getValue();
+            WebDocument document = candidateDocs.get(docId);
+            if (document != null) {
+                document.setTotalScore(score); // Set the document score
+            }
+        }
+
+        // Calculate skip value for pagination (page is 1-based)
+        int skip = (page - 1) * docsPerPage;
+
         return docScores.entrySet().stream()
                 .sorted((a, b) -> Double.compare(b.getValue(), a.getValue()))
+                .skip(skip)
+                .limit(docsPerPage)
                 .map(entry -> candidateDocs.get(entry.getKey()))
                 .toList();
     }

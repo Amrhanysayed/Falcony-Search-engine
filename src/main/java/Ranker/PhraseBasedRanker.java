@@ -23,7 +23,7 @@ public class PhraseBasedRanker implements Ranker {
 
     @Override
     public List<WebDocument> rank(List<String> queryTexts, List<String> tokensFirst, List<String> tokensSecond,
-                                  Set<String> candidateDocsIds, String logicalOperator) {
+                                  Set<String> candidateDocsIds, String logicalOperator, Integer page, Integer docsPerPage) {
         // sort return
         String firstPhrase = queryTexts.get(0).toLowerCase();
         String secondPhrase = logicalOperator.isEmpty() ? "" : queryTexts.get(1).toLowerCase();
@@ -45,11 +45,19 @@ public class PhraseBasedRanker implements Ranker {
 
         // Apply TF_IDF
         Map<String, List<Posting>> tokenToPostings = db.getPostingsForTokens(combinedTokens, filteredCandidateIds);
-        Map<String, WebDocument> filteredDocs = db.getDocumentsByIds(filteredCandidateIds);
+        Map<String, WebDocument> filteredDocs = db.getDocumentsByIdsForRanking(filteredCandidateIds);
 
         // Get relevance scores - pass weightConfig
         Map<String, Double> docScores = Helpers.RelevanceScore(combinedTokens, tokenToPostings, totalDocCount, filteredDocs, weightConfig);
 
+        for (Map.Entry<String, Double> entry : docScores.entrySet()) {
+            String docId = entry.getKey();
+            Double score = entry.getValue();
+            WebDocument document = filteredDocs.get(docId);
+            if (document != null) {
+                document.setTfScore(score); // Set the document score
+            }
+        }
         // Apply phrase boost for titles
         for (WebDocument doc : filteredDocs.values()) {
             double titleCount = countPhraseOccurrences(firstPhrase, doc.getTitle()) +
@@ -63,8 +71,22 @@ public class PhraseBasedRanker implements Ranker {
         // Apply popularity adjustment
         docScores = Helpers.ApplyPopularityScore(docScores, filteredDocs, popularityAlpha);
 
+        for (Map.Entry<String, Double> entry : docScores.entrySet()) {
+            String docId = entry.getKey();
+            Double score = entry.getValue();
+            WebDocument document = filteredDocs.get(docId);
+            if (document != null) {
+                document.setTotalScore(score); // Set the document score
+            }
+        }
+
+        // Calculate skip value for pagination (page is 1-based)
+        int skip = (page - 1) * docsPerPage;
+
         return docScores.entrySet().stream()
                 .sorted((a, b) -> Double.compare(b.getValue(), a.getValue()))
+                .skip(skip)
+                .limit(docsPerPage)
                 .map(entry -> filteredDocs.get(entry.getKey()))
                 .toList();
     }

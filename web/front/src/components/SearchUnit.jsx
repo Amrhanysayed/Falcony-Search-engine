@@ -2,7 +2,6 @@ import React, { useRef, useState, useEffect } from "react";
 import { FaSearch, FaCamera, FaMicrophone } from "react-icons/fa";
 import { useNavigate } from "react-router";
 import { useQuery } from "../context/QueryContext";
-import SuggestionsList from "./SuggestionsList";
 
 const MAX_SUGGESTIONS = 5;
 
@@ -12,11 +11,35 @@ function SearchUnit() {
   const [showDropdown, setShowDropdown] = useState(false);
   const nav = useNavigate();
   const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    const stored = JSON.parse(localStorage.getItem("searchSuggestions")) || [];
+    setSuggestions(stored);
+  }, []);
+
   const handleSearch = (e) => {
     e.preventDefault();
     if (!searchQuery.trim()) return;
 
     nav(`/search?query=${searchQuery}`);
+    setShowDropdown(false);
+
+    // Save to localStorage
+    let updated = [
+      searchQuery,
+      ...suggestions.filter((s) => s !== searchQuery),
+    ];
+    if (updated.length > MAX_SUGGESTIONS) {
+      updated = updated.slice(0, MAX_SUGGESTIONS);
+    }
+
+    localStorage.setItem("searchSuggestions", JSON.stringify(updated));
+    setSuggestions(updated);
+  };
+
+  const handleSuggestionClick = (sugg) => {
+    setSearchQuery(sugg);
+    nav(`/search?query=${sugg}`);
     setShowDropdown(false);
   };
 
@@ -81,13 +104,18 @@ function SearchUnit() {
       </form>
 
       {/* Dropdown Suggestions */}
-
-      {showDropdown && (
-        <SuggestionsList
-          query={searchQuery}
-          setShowDropdown={setShowDropdown}
-          setSearchQuery={setSearchQuery}
-        />
+      {showDropdown && suggestions.length > 0 && (
+        <ul className="absolute z-10 w-full mt-2 bg-white border border-gray-300 rounded-md shadow-md max-h-48 overflow-y-auto">
+          {suggestions.map((s, i) => (
+            <li
+              key={i}
+              onClick={() => handleSuggestionClick(s)}
+              className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+            >
+              {s}
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

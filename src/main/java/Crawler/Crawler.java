@@ -19,10 +19,10 @@ public class Crawler {
     private final ConcurrentLinkedQueue<String> urlsToCrawl = new ConcurrentLinkedQueue<>();
     private final Set<String> visited = ConcurrentHashMap.newKeySet();
     private final AtomicInteger pageCount = new AtomicInteger(0); /// thread safe int
-    private final int maxPages = 6000;
+    private final int maxPages = 7000;
     private final RobotsManager robotsM;
     private final ExecutorService executor;
-    private final int numThreads = 16;
+    private final int numThreads = 10;
     private final dbManager mongo; // database agent
     private static Set<String> excludedParams; // file for reading normalization
     // cache for normalized URLs to avoid re-normalizing
@@ -74,13 +74,6 @@ public class Crawler {
             List<String> savedVisited = (List<String>) state.get("visited");
             int savedPageCount = (Integer) state.get("pageCount");
 
-            // Only load a subset of visited URLs to prevent memory issues
-            int maxVisitedToLoad = 100000;
-            if (savedVisited.size() > maxVisitedToLoad) {
-                savedVisited = savedVisited.subList(savedVisited.size() - maxVisitedToLoad, savedVisited.size());
-                System.out.println("Loaded " + maxVisitedToLoad + " of " + savedVisited.size() + " visited URLs");
-            }
-
             urlsToCrawl.addAll(savedUrlsToCrawl);
             visited.addAll(savedVisited);
             pageCount.set(savedPageCount);
@@ -114,8 +107,11 @@ public class Crawler {
                 try {
                     String normalized = normalizeUrl(line, null);
                     if (normalized != null && !normalized.isEmpty() && !visited.contains(normalized)) {
-                        robotsM.parseRobots(normalized);
+
+                        if(robotsM.canCrawl(normalized)){
                         urlsToCrawl.add(normalized);
+
+                        }
                     }
                 } catch (Exception e) {
                     System.err.println("Failed to normalize seed URL: " + line);
@@ -131,10 +127,10 @@ public class Crawler {
         List<Future<?>> futures = new ArrayList<>();
 
         // Create worker pool with shared document batch
-        BlockingQueue<Document> documentBatchQueue = new LinkedBlockingQueue<>(6000); /// this will be send to the dbwriter
+        BlockingQueue<Document> documentBatchQueue = new LinkedBlockingQueue<>(10000); /// this will be send to the dbwriter
 
         // Start database writer thread
-        DbWriterThread dbWriter = new DbWriterThread(documentBatchQueue, mongo);
+        DbWriterThread dbWriter = new DbWriterThread(documentBatchQueue, mongo,this);
         Thread dbWriterThread = new Thread(dbWriter);
         dbWriterThread.start();
 
@@ -199,6 +195,9 @@ public class Crawler {
             return null;
         }
 
+
+
+
         // Quick filters for common non-http URLs
         if (url.startsWith("javascript:") || url.startsWith("mailto:") || url.startsWith("tel:") ||
                 url.startsWith("#") || url.startsWith("data:")) {
@@ -238,6 +237,7 @@ public class Crawler {
             return null;
         }
 
+
         String scheme = uri.getScheme() != null ? uri.getScheme().toLowerCase() : "http";
         if (!scheme.equals("http") && !scheme.equals("https")) {
             return null;
@@ -254,6 +254,18 @@ public class Crawler {
         }
 
         String path = uri.getPath() != null ? uri.getPath() : "/";
+
+        ///  filter non english
+        String[] segments = path.split("/");
+        if (segments.length > 1) {
+            String langCode = segments[1].toLowerCase();
+            if (!langCode.startsWith("en")) {
+                return null;
+            }
+        }
+
+
+
         String query = uri.getQuery();
         String newQuery = null;
 
@@ -286,13 +298,12 @@ public class Crawler {
         try {
             String normalizedUrl = new URI(scheme, null, host, port, path, newQuery, null).toString();
             // Cache the result
-            if (urlNormalizeCache.size() < 10000) { // Limit cache size
+            if (urlNormalizeCache.size() < 10000) {
                 urlNormalizeCache.put(cacheKey, normalizedUrl);
             }
 
-            while (normalizedUrl.endsWith("?")) {
-                normalizedUrl = normalizedUrl.substring(0, normalizedUrl.length() - 1);
-            }
+            normalizedUrl.replace("?", "");
+
             return normalizedUrl;
         } catch (Exception e) {
             return null;
@@ -315,7 +326,6 @@ public class Crawler {
             System.err.println("Crawling failed: " + e.getMessage());
         } finally {
             cr.close();
-            //System.exit(0);
         }
     }
 
@@ -326,12 +336,14 @@ public class Crawler {
     private static class DbWriterThread implements Runnable {
         private final BlockingQueue<Document> queue;
         private final dbManager dbManager;
+        private final Crawler crawler;
         private volatile boolean running = true;
         private static final int BATCH_SIZE = 500;
 
-        public DbWriterThread(BlockingQueue<Document> queue, dbManager dbManager) {
+        public DbWriterThread(BlockingQueue<Document> queue, dbManager dbManager,Crawler cr) {
             this.queue = queue;
             this.dbManager = dbManager;
+            this.crawler = cr ;
         }
 
         public void shutdown() {
@@ -354,6 +366,7 @@ public class Crawler {
                         try {
                             dbManager.insertDocuments(batch);
                             System.out.println("///////////////////////////Inserted batch of//////////////////////////  " + batch.size() + " documents");
+                            crawler.saveState();
                         } catch (Exception e) {
                             System.err.println("Batch insert failed: " + e.getMessage());
                         }

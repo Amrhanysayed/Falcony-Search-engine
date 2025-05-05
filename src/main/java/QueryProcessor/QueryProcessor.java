@@ -16,21 +16,36 @@ public class QueryProcessor {
 
     dbManager db;
     Tokenizer tokenizer;
+    private static final int SUGGESTION_LIMIT = 10;
+    private static final int SNIPPETS_LENGTH = 100;
 
     public QueryProcessor() throws Exception {
         db = new dbManager();  // Fixed: Assign to instance variable, not local variable
         tokenizer = new Tokenizer();
     }
 
-    public List<WebDocument> process(String query) throws Exception {
+    public List<WebDocument> process(String query, Integer page, Integer docsPerPage) throws Exception {
         query = query.trim().toLowerCase(); // ALL COMING LOGIC IS BASED ON LOWERCASE
+        final String finalQuery = query;
         List<String> queryTexts = new ArrayList<>();
         Pattern pattern = Pattern.compile("\"([^\"]*)\"\\s*(AND|OR|NOT)\\s*\"([^\"]*)\"", Pattern.CASE_INSENSITIVE);
         boolean isUsingOperator = false;
         boolean isUsingPhrase = false;
         String operator = "";
         Matcher matcher = pattern.matcher(query);
-
+        
+        
+        // Add the query to the database in a separate thread
+        new Thread(() -> {
+            try {
+                db.addQuery(finalQuery, normalizeQuery(finalQuery)); // Add the query to the database
+                System.out.println("Query added to the database: " + finalQuery);
+            } catch (Exception e) {
+                System.out.println("eRROr");
+                e.printStackTrace();
+            }
+        }).start();
+        
         // Check if the query contains a logical operator
         if (matcher.matches()) {
             // Add the first phrase to the query texts
@@ -85,23 +100,23 @@ public class QueryProcessor {
                 candidateDocIds.addAll(candidateDocIdsSecond);
             }
 
-            rankerContext.setRanker(new PhraseBasedRanker(0));
+            rankerContext.setRanker(new PhraseBasedRanker(9));
 //            queryTerms = queryTexts;
         }
         else {
             candidateDocIds = db.getDocIdsForTokens(tokensFirst , false);
-            rankerContext.setRanker(new TokenBasedRanker(0));
+            rankerContext.setRanker(new TokenBasedRanker(9));
 //            queryTerms = tokensFirst;
             System.out.println("Token Based");
         }
 
-        System.out.println("WILL RANK");
+        System.out.println("Candidate docs size: " + candidateDocIds.size());
 
         double startTime = System.currentTimeMillis();
-        List<WebDocument> Results = rankerContext.rank(queryTexts , tokensFirst, tokensSecond, candidateDocIds, operator);
+        List<WebDocument> Results = rankerContext.rank(queryTexts , tokensFirst, tokensSecond, candidateDocIds, operator, page, docsPerPage);
         double endTime = System.currentTimeMillis();
         double duration = (endTime - startTime) / 1000;
-        System.out.println("Anas Ranker took " + duration + " seconds");
+        System.out.println("Ranker took " + duration + " seconds");
 
 //        System.out.println(queryTerms);
         System.out.println(candidateDocIds);
@@ -109,23 +124,34 @@ public class QueryProcessor {
 
         System.out.println("Found " + Results.size() + " results");
 
-        int counter = 0;
+        Map<String, String> snippets = db.getListOfSnippets(Results, query, SNIPPETS_LENGTH);
         for (WebDocument doc : Results) {
             System.out.println();
             doc.Print();
-            counter++;
-            if (counter > 22)
-                break;
+            doc.setSnippet(snippets.getOrDefault(doc.getId(), ""));
         }
 
         return Results;
 
     }
+    public List<String> getSuggestions(String query) throws Exception {
+       return db.getSuggestions(query, normalizeQuery(query), SUGGESTION_LIMIT);
+    }
 
+    private String normalizeQuery(String query) {
+        if (query == null || query.trim().isEmpty()) {
+            return "";
+        }
+        // Remove punctuation, apostrophes, and extra spaces; convert to lowercase
+        return query.trim()
+                .toLowerCase()
+                .replaceAll("[^a-z0-9\\s]", "") // Remove all non-alphanumeric characters except spaces
+                .replaceAll("\\s+", " ");       // Replace multiple spaces with a single space
+    }
 
     public static void main(String[] args) throws Exception {
         QueryProcessor qp = new QueryProcessor();
-        qp.process("\"Autism\"");
+        qp.process("Messi world cup", 1, 50);
 
     }
 

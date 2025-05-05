@@ -60,8 +60,8 @@ public final class Helpers {
             if (doc != null) {
                 double relevanceScore = entry.getValue();
                 double popularity = doc.getPopularity();
-                double combinedScore = (1 - popularityAlpha) * relevanceScore +
-                        popularityAlpha * 10000 * popularity;
+                double combinedScore = relevanceScore +
+                        Math.min(popularityAlpha * 12000 * popularity , relevanceScore * 0.25);
 
                 entry.setValue(combinedScore);
             }

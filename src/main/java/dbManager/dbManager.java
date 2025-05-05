@@ -1,20 +1,27 @@
 package dbManager;
 
-import Backend.Image;
-import Utils.Posting;
-import Utils.WebDocument;
-import com.mongodb.MongoBulkWriteException;
-import com.mongodb.bulk.BulkWriteError;
-import com.mongodb.client.*;
-import com.mongodb.client.model.*;
-import io.github.cdimascio.dotenv.Dotenv;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
+import Utils.SnippetGenerator;
+import com.mongodb.MongoException;
 import org.bson.Document;
 import org.bson.types.ObjectId;
 
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
+import com.mongodb.ConnectionString;
+import com.mongodb.MongoBulkWriteException;
+import com.mongodb.MongoClientSettings;
+import com.mongodb.bulk.BulkWriteError;
+import com.mongodb.client.*;
+import com.mongodb.client.model.*;
+
+import Backend.Image;
+import Utils.Posting;
+import Utils.WebDocument;
+import io.github.cdimascio.dotenv.Dotenv;
 
 public class dbManager {
     private static final Dotenv dotenv = Dotenv.load();
@@ -32,37 +39,49 @@ public class dbManager {
     private final MongoCollection<Document> docsCollections;
     private final MongoCollection<Document> crawlerStateCollection;
     private final MongoCollection<Document> imageCollection;
+    private final MongoCollection<Document> queryCollection;
 
     private static final int BULK_WRITE_BATCH_SIZE = 1000;
 
     public dbManager() {
-        mongoClient = MongoClients.create(CONNECTION_STRING);
-        imagesMongoClient = MongoClients.create(IMAGES_CONNECTION_STRING);
-        database = mongoClient.getDatabase(DB_NAME);
+
+        mongoClient = MongoClients.create(getMongoClientSettings(CONNECTION_STRING));
+        MongoDatabase database = mongoClient.getDatabase(DB_NAME);
+
+        imagesMongoClient = MongoClients.create(getMongoClientSettings(IMAGES_CONNECTION_STRING));
+
+
         docsCollections = database.getCollection(COLLECTION_NAME);
         tokensCollection = database.getCollection("tokens");  // Renamed for proper casing
+        queryCollection = database.getCollection("queries");
 
         imagesDatabase = imagesMongoClient.getDatabase(DB_NAME);
         imageCollection = imagesDatabase.getCollection("images");
 
-
         crawlerStateCollection= database.getCollection("crawler_state");
         System.out.println("Connected to MongoDB Atlas.");
+        addIndexes();
     }
 
-    // Insert a document
-    // crawler
-    ///  TODO: url, doc
-    public void insertDocument(String url, String title, String content) {
+    private MongoClientSettings getMongoClientSettings(String connectionString) {
+        return MongoClientSettings.builder()
+                .applyConnectionString(new ConnectionString(connectionString))
+                .applyToConnectionPoolSettings(builder ->
+                        builder.maxSize(20)
+                                .minSize(5)
+                                .maxWaitTime(7000, TimeUnit.MILLISECONDS)
+                                .maxConnectionIdleTime(40000, TimeUnit.MILLISECONDS))
+                .applyToSocketSettings(builder ->
+                        builder.connectTimeout(10000, TimeUnit.MILLISECONDS)
+                                .readTimeout(40000, TimeUnit.MILLISECONDS))
+                .build();
 
-        Document doc = new Document("url", url)
-                .append("title", title.trim())
-                .append("content", content.trim())
-                .append("timestamp", System.currentTimeMillis())
-                .append("indexed", false);
+    }
 
-        docsCollections.insertOne(doc);
-        System.out.println("Document inserted: " + title);
+    private void addIndexes() {
+        queryCollection.createIndex(Indexes.ascending("_id")); // Already exists for _id
+        queryCollection.createIndex(Indexes.text("_id")); // For text search
+        queryCollection.createIndex(Indexes.ascending("normalized"));
     }
 
     public void insertDocuments(List<Document> documents) {
@@ -115,25 +134,6 @@ public class dbManager {
             System.err.println("Failed to load crawler state: " + e.getMessage());
 
             return null;
-        }
-    }
-
-
-
-    // Search documents by keyword
-    public void searchByKeyword(String keyword) {
-        Pattern pattern = Pattern.compile(keyword, Pattern.CASE_INSENSITIVE);
-        FindIterable<Document> results = docsCollections.find(
-                Filters.or(
-                        Filters.regex("title", pattern),
-                        Filters.regex("content", pattern)
-                )
-        );
-
-        for (Document doc : results) {
-            System.out.println("Title: " + doc.getString("title"));
-            System.out.println("URL: " + doc.getString("url"));
-            System.out.println("----");
         }
     }
 
@@ -356,7 +356,7 @@ public class dbManager {
     }
 
 
-    public Map<String , WebDocument> getDocumentsByIds(Set<String> docIds) {
+    public Map<String , WebDocument> getDocumentsByIdsForRanking(Set<String> docIds) {
         Map<String , WebDocument> docs = new HashMap<>();
 
         List<ObjectId> objectIds = docIds.stream()
@@ -373,6 +373,25 @@ public class dbManager {
 
             WebDocument webDoc = new WebDocument(id, url, title, "" , popularity);
             docs.put(id , webDoc);
+        }
+
+        return docs;
+    }
+
+    public Map<String , String> getListOfSnippets(List<WebDocument> docsList, String query, int snippet_length) {
+        Map<String , String> docs = new HashMap<>();
+
+        List<ObjectId> objectIds = docsList.stream()
+                .map(doc -> new ObjectId(doc.getId()))
+                .collect(Collectors.toList());
+
+        System.out.println("WHERE IS MY CANDODO 2");
+        for (Document doc : docsCollections.find(Filters.in("_id", objectIds)).projection(
+                Projections.include("_id", "content"))) {
+            String id = doc.getObjectId("_id").toString();
+            String content = doc.getString("content");
+
+            docs.put(id , SnippetGenerator.getSnippet(content, query, snippet_length));
         }
 
         return docs;
@@ -502,6 +521,47 @@ public class dbManager {
                 .append("_class", img.getClass().getName());
     }
 
+
+    public void addQuery(String query, String normalizedQuery) {
+        if (query == null || query.trim().isEmpty()) {
+            return;
+        }
+        if (normalizedQuery.isEmpty()) {
+            return;
+        }
+        try {
+            UpdateOptions options = new UpdateOptions().upsert(true);
+            queryCollection.updateOne(
+                    Filters.eq("_id", query), // Use original query as _id
+                    new Document("$inc", new Document("count", 1))
+                            .append("$set", new Document("normalized", normalizedQuery)),
+                    options
+            );
+        } catch (MongoException e) {
+            System.err.println("Error adding query: " + e.getMessage());
+        }
+    }
+
+    public List<String> getSuggestions(String prefix, String normalizedPrefix, int limit) {
+        if (prefix == null || prefix.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+        if (normalizedPrefix.isEmpty()) {
+            return Collections.emptyList();
+        }
+        try {
+            return queryCollection.find(Filters.regex("normalized", "^" + Pattern.quote(normalizedPrefix), "i"))
+                    .sort(Sorts.descending("count"))
+                    .limit(limit)
+                    .into(new ArrayList<>())
+                    .stream()
+                    .map(doc -> doc.getString("_id")) // Return original _id for display
+                    .collect(Collectors.toList());
+        } catch (MongoException e) {
+            System.err.println("Error fetching suggestions: " + e.getMessage());
+            return Collections.emptyList();
+        }
+    }
 
     // Close the database connection
     public void close() {
