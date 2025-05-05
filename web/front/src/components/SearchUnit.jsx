@@ -3,6 +3,7 @@ import { FaSearch, FaCamera, FaMicrophone } from "react-icons/fa";
 import { useNavigate } from "react-router";
 import { useQuery } from "../context/QueryContext";
 import SuggestionsList from "./SuggestionsList";
+import falcony_api from "../axiosInstance";
 
 const MAX_SUGGESTIONS = 5;
 
@@ -12,6 +13,7 @@ function SearchUnit() {
   const [showDropdown, setShowDropdown] = useState(false);
   const nav = useNavigate();
   const fileInputRef = useRef(null);
+  const { file, setFile } = useQuery();
   const handleSearch = (e) => {
     e.preventDefault();
     if (!searchQuery.trim()) return;
@@ -27,7 +29,10 @@ function SearchUnit() {
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      console.log("Image selected:", file.name);
+ 
+      setFile(file);
+      
+      nav(`/search?image=true`);
     }
   };
 

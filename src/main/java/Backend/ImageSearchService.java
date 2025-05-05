@@ -1,6 +1,7 @@
 package Backend;
 
 import ImageSearching.ImageFeatureExtractor;
+import Utils.WebDocument;
 import ai.onnxruntime.OrtException;
 import com.mongodb.client.AggregateIterable;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,9 +20,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.IntStream;
 
 @Service
@@ -98,7 +97,7 @@ public class ImageSearchService {
         }
     }
 
-    public List<Image> searchSimilarImages(MultipartFile file) throws Exception {
+    public List<WebDocument> searchSimilarImages(MultipartFile file, int limit) throws Exception {
         try {
             // Extract features of the input image
             float[] queryFeatures = featureExtractor.extractFeatures(file.getBytes());
@@ -112,17 +111,19 @@ public class ImageSearchService {
                             .append("knnBeta", new Document()
                                     .append("vector", vectorList)
                                     .append("path", "features")
-                                    .append("k", 10)  // Top 10 results
+                                    .append("k", limit)  // Top x results
                             )
                     )
             );
 
             AggregateIterable<Document> result = mongoTemplate.getCollection("images").aggregate(pipeline);
-            List<Image> resultList = new ArrayList<>();
+//            List<Image> resultList = new ArrayList<>();
+            List<WebDocument> docs = new ArrayList<>();
             for (Document doc : result) {
                 Image image = new Image();
                 image.setId(doc.getString("_id"));
                 image.setUrl(doc.getString("url"));
+                image.setDocUrl(doc.getString("docUrl"));
 
                 List<Double> featuresList = (List<Double>) doc.get("features");
                 float[] features = new float[featuresList.size()];
@@ -130,15 +131,18 @@ public class ImageSearchService {
                     features[i] = featuresList.get(i).floatValue();
                 }
 
-                // 🔥 Calculate similarity score (confidence)
                 float similarity = calculateCosineSimilarity(queryFeatures, features);
                 System.out.println("Similarity for image " + image.getUrl() + ": " + similarity);
                 if(similarity > 0.3) {
-                    resultList.add(image);
+//                    resultList.add(image);
+                    docs.add(new WebDocument(image.getDocUrl(), image.getDocUrl(), image.getDocUrl(), "", Collections.singletonList(image.getUrl())));
+                }
+                if(docs.size() >= limit) {
+                    break;
                 }
             }
             // Return top 10 similar images
-            return resultList;
+            return docs;
         } catch (IOException e) {
             throw new RuntimeException("Failed to search images", e);
         }

@@ -1,6 +1,7 @@
 package Backend;
 
 import ImageSearching.ImageFeatureExtractor;
+import Utils.WebDocument;
 import ai.onnxruntime.OrtException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -41,7 +42,9 @@ public class ImageController {
 
     @CrossOrigin(origins = "*")
     @PostMapping("/search_images")
-    public List<Image> searchSimilarImages(@RequestParam("file") MultipartFile file) throws Exception {
-        return imageSearchService.searchSimilarImages(file);
+    public ResultsResponse searchSimilarImages(@RequestParam("file") MultipartFile file, @RequestParam(name = "limit") Integer limit) throws Exception {
+        List<WebDocument> docs = imageSearchService.searchSimilarImages(file, limit);
+        ResultsResponse res = new ResultsResponse(docs.size(), docs);
+        return res;
     }
 }

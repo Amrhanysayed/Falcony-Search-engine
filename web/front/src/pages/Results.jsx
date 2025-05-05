@@ -13,6 +13,7 @@ import Loading from "../components/Loading";
 
 import Sidebar from "../components/Sidebar";
 import ImageSearchResult from "../components/ImageSearchResult";
+import { useQuery } from "../context/QueryContext";
 
 const limit = 10;
 const Results = () => {
@@ -33,7 +34,11 @@ const Results = () => {
     docs: [],
   });
 
+
+  const { file } = useQuery();
+
   useEffect(() => {
+    if(!query || query.length === 0) return; // If no query, do not fetch results
     const fetchResults = async () => {
       setloading(true);
       setTimeTaken(0);
@@ -56,6 +61,37 @@ const Results = () => {
 
     fetchResults();
   }, [query, page]);
+
+  useEffect(() => {
+    const fetchImageResults = async () => {
+      setloading(true);
+      setTimeTaken(0);
+      const startTime = Date.now(); // Start time
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("limit", limit*2);
+
+        const response = await falcony_api.post("/search_images", formData);
+        
+        console.log(response.data);
+        setSearchResults(response.data);
+        setTotalPages(Math.ceil(response.data.total / limit));
+        setStatus("images");
+      } catch (error) {
+        console.error("Error fetching image search results:", error);
+      } finally {
+        setloading(false);
+        // Convert milliseconds to seconds
+        setTimeTaken((Date.now() - startTime) / 1000);
+      }
+    };
+
+    if (file) {
+      fetchImageResults();
+    }
+  }
+  , [file]);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
