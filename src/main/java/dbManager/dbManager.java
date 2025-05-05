@@ -45,10 +45,10 @@ public class dbManager {
 
     public dbManager() {
 
-        mongoClient = MongoClients.create(getMongoClientSettings(CONNECTION_STRING));
+        mongoClient = MongoClients.create(CONNECTION_STRING);
         MongoDatabase database = mongoClient.getDatabase(DB_NAME);
 
-        imagesMongoClient = MongoClients.create(getMongoClientSettings(IMAGES_CONNECTION_STRING));
+        imagesMongoClient = MongoClients.create(IMAGES_CONNECTION_STRING);
 
 
         docsCollections = database.getCollection(COLLECTION_NAME);
@@ -61,21 +61,6 @@ public class dbManager {
         crawlerStateCollection= database.getCollection("crawler_state");
         System.out.println("Connected to MongoDB Atlas.");
         addIndexes();
-    }
-
-    private MongoClientSettings getMongoClientSettings(String connectionString) {
-        return MongoClientSettings.builder()
-                .applyConnectionString(new ConnectionString(connectionString))
-                .applyToConnectionPoolSettings(builder ->
-                        builder.maxSize(20)
-                                .minSize(5)
-                                .maxWaitTime(7000, TimeUnit.MILLISECONDS)
-                                .maxConnectionIdleTime(40000, TimeUnit.MILLISECONDS))
-                .applyToSocketSettings(builder ->
-                        builder.connectTimeout(10000, TimeUnit.MILLISECONDS)
-                                .readTimeout(40000, TimeUnit.MILLISECONDS))
-                .build();
-
     }
 
     private void addIndexes() {
