@@ -27,20 +27,20 @@ public class Engine {
 
         startTime = System.currentTimeMillis();
 
+        PageRank.main(args);
+
+        endTime = System.currentTimeMillis();
+        duration = (endTime - startTime) / 1000;
+        System.out.println("Page Rank took " + duration + " seconds");
+
+        startTime = System.currentTimeMillis();
+
         ImageIndexer imageIndexer = new ImageIndexer();
         imageIndexer.runIndexer();
 
         endTime = System.currentTimeMillis();
         duration = (endTime - startTime) / 1000;
         System.out.println("Image Indexer took " + duration + " seconds");
-
-        startTime = System.currentTimeMillis();
-
-        PageRank.main(args);
-
-        endTime = System.currentTimeMillis();
-        duration = (endTime - startTime) / 1000;
-        System.out.println("Page Rank took " + duration + " seconds");
 
     }
 }

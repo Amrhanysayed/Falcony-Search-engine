@@ -42,15 +42,33 @@ public class TokenBasedRanker implements Ranker {
         double duration = (endTime - startTime) / 1000;
         System.out.println("Get postings for tokens took " + duration + " seconds");
         startTime = System.currentTimeMillis();
-        Map<String, WebDocument> candidateDocs = db.getDocumentsByIds(candidateDocsIds);
+        Map<String, WebDocument> candidateDocs = db.getDocumentsByIdsForRanking(candidateDocsIds);
         endTime = System.currentTimeMillis();
         duration = (endTime - startTime) / 1000;
         System.out.println("Get docs by id took " + duration + " seconds");
         // Get relevance scores - pass weightConfig
         Map<String, Double> docScores = Helpers.RelevanceScore(combinedTokens, tokenToPostings, totalDocCount, candidateDocs, weightConfig);
 
+        for (Map.Entry<String, Double> entry : docScores.entrySet()) {
+            String docId = entry.getKey();
+            Double score = entry.getValue();
+            WebDocument document = candidateDocs.get(docId);
+            if (document != null) {
+                document.setTfScore(score); // Set the document score
+            }
+        }
+
         // Apply popularity adjustment
         docScores = Helpers.ApplyPopularityScore(docScores, candidateDocs, popularityAlpha);
+
+        for (Map.Entry<String, Double> entry : docScores.entrySet()) {
+            String docId = entry.getKey();
+            Double score = entry.getValue();
+            WebDocument document = candidateDocs.get(docId);
+            if (document != null) {
+                document.setTotalScore(score); // Set the document score
+            }
+        }
 
         // Calculate skip value for pagination (page is 1-based)
         int skip = (page - 1) * docsPerPage;

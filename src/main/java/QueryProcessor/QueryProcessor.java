@@ -17,6 +17,7 @@ public class QueryProcessor {
     dbManager db;
     Tokenizer tokenizer;
     private static final int SUGGESTION_LIMIT = 10;
+    private static final int SNIPPETS_LENGTH = 100;
 
     public QueryProcessor() throws Exception {
         db = new dbManager();  // Fixed: Assign to instance variable, not local variable
@@ -99,23 +100,23 @@ public class QueryProcessor {
                 candidateDocIds.addAll(candidateDocIdsSecond);
             }
 
-            rankerContext.setRanker(new PhraseBasedRanker(0));
+            rankerContext.setRanker(new PhraseBasedRanker(9));
 //            queryTerms = queryTexts;
         }
         else {
             candidateDocIds = db.getDocIdsForTokens(tokensFirst , false);
-            rankerContext.setRanker(new TokenBasedRanker(0));
+            rankerContext.setRanker(new TokenBasedRanker(9));
 //            queryTerms = tokensFirst;
             System.out.println("Token Based");
         }
 
-        System.out.println("WILL RANK");
+        System.out.println("Candidate docs size: " + candidateDocIds.size());
 
         double startTime = System.currentTimeMillis();
         List<WebDocument> Results = rankerContext.rank(queryTexts , tokensFirst, tokensSecond, candidateDocIds, operator, page, docsPerPage);
         double endTime = System.currentTimeMillis();
         double duration = (endTime - startTime) / 1000;
-        System.out.println("Anas Ranker took " + duration + " seconds");
+        System.out.println("Ranker took " + duration + " seconds");
 
 //        System.out.println(queryTerms);
         System.out.println(candidateDocIds);
@@ -123,13 +124,11 @@ public class QueryProcessor {
 
         System.out.println("Found " + Results.size() + " results");
 
-        int counter = 0;
+        Map<String, String> snippets = db.getListOfSnippets(Results, query, SNIPPETS_LENGTH);
         for (WebDocument doc : Results) {
             System.out.println();
             doc.Print();
-            counter++;
-            if (counter > 22)
-                break;
+            doc.setSnippet(snippets.getOrDefault(doc.getId(), ""));
         }
 
         return Results;
@@ -152,7 +151,7 @@ public class QueryProcessor {
 
     public static void main(String[] args) throws Exception {
         QueryProcessor qp = new QueryProcessor();
-        qp.process("Messi world cup", 1, 500000);
+        qp.process("Messi world cup", 1, 50);
 
     }
 

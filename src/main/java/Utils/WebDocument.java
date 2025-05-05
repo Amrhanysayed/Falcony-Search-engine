@@ -12,11 +12,12 @@ import java.util.Map;
 
 public class WebDocument {
     public final String docId; // Made final for immutability
-    public String url, title, html;
+    public String url, title, html, snippet;
     public Double popularity;
     public int[] children;
     private List<String> images;
     private Document parsedDocument; // Cache the parsed document for better performance
+    private double tfscore, totalscore;
 
     public WebDocument(String docId, String url, String title, String html, Double popularity, int[] children) {
         this.docId = docId;
@@ -122,13 +123,44 @@ public class WebDocument {
         return images;
     }
 
+    public String getSnippet() {
+        return snippet;
+    }
+
+    public void setSnippet(String snippet) {
+        this.snippet = snippet;
+    }
+
     public void Print() {
-        System.out.println();
         System.out.println("Document ID: " + docId);
         System.out.println(url);
         System.out.println(title);
+        System.out.println("totalScore " + totalscore);
+        System.out.println("tfscore " + tfscore);
+        System.out.println("popscore " + popularity);
+
         //System.out.println(html);
         System.out.println();
+    }
+
+    public void setTfScore(double x)
+    {
+        this.tfscore = x;
+    }
+
+    public double getTfScore(double x)
+    {
+        return this.tfscore;
+    }
+
+    public void setTotalScore(double x)
+    {
+        this.totalscore = x;
+    }
+
+    public double getTotalScore(double x)
+    {
+        return this.totalscore;
     }
 
     @Override

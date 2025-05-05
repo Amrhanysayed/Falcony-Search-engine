@@ -6,6 +6,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import Utils.SnippetGenerator;
 import com.mongodb.MongoException;
 import org.bson.Document;
 import org.bson.types.ObjectId;
@@ -82,20 +83,6 @@ public class dbManager {
         queryCollection.createIndex(Indexes.text("_id")); // For text search
         queryCollection.createIndex(Indexes.ascending("normalized"));
     }
-    // Insert a document
-    // crawler
-    ///  TODO: url, doc
-    public void insertDocument(String url, String title, String content) {
-
-        Document doc = new Document("url", url)
-                .append("title", title.trim())
-                .append("content", content.trim())
-                .append("timestamp", System.currentTimeMillis())
-                .append("indexed", false);
-
-        docsCollections.insertOne(doc);
-        System.out.println("Document inserted: " + title);
-    }
 
     public void insertDocuments(List<Document> documents) {
         try {
@@ -147,25 +134,6 @@ public class dbManager {
             System.err.println("Failed to load crawler state: " + e.getMessage());
 
             return null;
-        }
-    }
-
-
-
-    // Search documents by keyword
-    public void searchByKeyword(String keyword) {
-        Pattern pattern = Pattern.compile(keyword, Pattern.CASE_INSENSITIVE);
-        FindIterable<Document> results = docsCollections.find(
-                Filters.or(
-                        Filters.regex("title", pattern),
-                        Filters.regex("content", pattern)
-                )
-        );
-
-        for (Document doc : results) {
-            System.out.println("Title: " + doc.getString("title"));
-            System.out.println("URL: " + doc.getString("url"));
-            System.out.println("----");
         }
     }
 
@@ -388,7 +356,7 @@ public class dbManager {
     }
 
 
-    public Map<String , WebDocument> getDocumentsByIds(Set<String> docIds) {
+    public Map<String , WebDocument> getDocumentsByIdsForRanking(Set<String> docIds) {
         Map<String , WebDocument> docs = new HashMap<>();
 
         List<ObjectId> objectIds = docIds.stream()
@@ -405,6 +373,25 @@ public class dbManager {
 
             WebDocument webDoc = new WebDocument(id, url, title, "" , popularity);
             docs.put(id , webDoc);
+        }
+
+        return docs;
+    }
+
+    public Map<String , String> getListOfSnippets(List<WebDocument> docsList, String query, int snippet_length) {
+        Map<String , String> docs = new HashMap<>();
+
+        List<ObjectId> objectIds = docsList.stream()
+                .map(doc -> new ObjectId(doc.getId()))
+                .collect(Collectors.toList());
+
+        System.out.println("WHERE IS MY CANDODO 2");
+        for (Document doc : docsCollections.find(Filters.in("_id", objectIds)).projection(
+                Projections.include("_id", "content"))) {
+            String id = doc.getObjectId("_id").toString();
+            String content = doc.getString("content");
+
+            docs.put(id , SnippetGenerator.getSnippet(content, query, snippet_length));
         }
 
         return docs;

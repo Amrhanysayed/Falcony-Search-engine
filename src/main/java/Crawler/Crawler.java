@@ -326,7 +326,6 @@ public class Crawler {
             System.err.println("Crawling failed: " + e.getMessage());
         } finally {
             cr.close();
-            System.exit(0);
         }
     }
 
