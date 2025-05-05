@@ -4,6 +4,7 @@ import Utils.Posting;
 import Utils.WebDocument;
 import dbManager.dbManager;
 import java.util.*;
+import java.util.stream.Stream;
 
 public class TokenBasedRanker implements Ranker {
 
@@ -22,9 +23,9 @@ public class TokenBasedRanker implements Ranker {
     }
 
     @Override
-    public List<WebDocument> rank(List<String> queryTexts, List<String> tokens, List<String> tokensSecond, Set<String> candidateDocsIds, String logicalOperator, Integer page, Integer docsPerPage) {
+    public List<WebDocument> rank(List<String> queryTexts, List<String> tokens, List<String> tokensSecond, Set<String> candidateDocsIds, String logicalOperator) {
 
-        Integer totalDocCount = db.getTotalDocCount();
+        int totalDocCount = db.getTotalDocCount();
         if (totalDocCount == 0) {
             return new ArrayList<>();
         }
@@ -70,14 +71,9 @@ public class TokenBasedRanker implements Ranker {
             }
         }
 
-        // Calculate skip value for pagination (page is 1-based)
-        int skip = (page - 1) * docsPerPage;
 
         return docScores.entrySet().stream()
                 .sorted((a, b) -> Double.compare(b.getValue(), a.getValue()))
-                .skip(skip)
-                .limit(docsPerPage)
-                .map(entry -> candidateDocs.get(entry.getKey()))
-                .toList();
+                .map(entry -> candidateDocs.get(entry.getKey())).toList();
     }
 }

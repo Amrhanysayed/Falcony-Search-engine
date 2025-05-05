@@ -1,5 +1,6 @@
 package QueryProcessor;
 
+import Backend.ResultsResponse;
 import Ranker.TokenBasedRanker;
 import Ranker.PhraseBasedRanker;
 import Ranker.RankerContext;
@@ -24,7 +25,7 @@ public class QueryProcessor {
         tokenizer = new Tokenizer();
     }
 
-    public List<WebDocument> process(String query, Integer page, Integer docsPerPage) throws Exception {
+    public ResultsResponse process(String query, int page, int limit) throws Exception {
         query = query.trim().toLowerCase(); // ALL COMING LOGIC IS BASED ON LOWERCASE
         final String finalQuery = query;
         List<String> queryTexts = new ArrayList<>();
@@ -113,7 +114,7 @@ public class QueryProcessor {
         System.out.println("Candidate docs size: " + candidateDocIds.size());
 
         double startTime = System.currentTimeMillis();
-        List<WebDocument> Results = rankerContext.rank(queryTexts , tokensFirst, tokensSecond, candidateDocIds, operator, page, docsPerPage);
+        List<WebDocument> Results = rankerContext.rank(queryTexts , tokensFirst, tokensSecond, candidateDocIds, operator);
         double endTime = System.currentTimeMillis();
         double duration = (endTime - startTime) / 1000;
         System.out.println("Ranker took " + duration + " seconds");
@@ -122,7 +123,20 @@ public class QueryProcessor {
         System.out.println(candidateDocIds);
         System.out.println(operator);
 
-        System.out.println("Found " + Results.size() + " results");
+        int count = Results.size();
+
+        System.out.println("Found " + count + " results");
+
+
+        int fromIndex = (page-1) * limit;
+
+        if (Results.size() <= fromIndex) {
+            return new ResultsResponse(0, new ArrayList<>());
+        }
+
+        // Calculate toIndex making sure it doesn't exceed the list size
+        int toIndex = Math.min(fromIndex + limit, Results.size());
+        Results = Results.subList(fromIndex, toIndex);
 
         Map<String, String> snippets = db.getListOfSnippets(Results, query, SNIPPETS_LENGTH);
         for (WebDocument doc : Results) {
@@ -131,8 +145,7 @@ public class QueryProcessor {
             doc.setSnippet(snippets.getOrDefault(doc.getId(), ""));
         }
 
-        return Results;
-
+        return new ResultsResponse(count, Results);
     }
     public List<String> getSuggestions(String query) throws Exception {
        return db.getSuggestions(query, normalizeQuery(query), SUGGESTION_LIMIT);
@@ -151,7 +164,7 @@ public class QueryProcessor {
 
     public static void main(String[] args) throws Exception {
         QueryProcessor qp = new QueryProcessor();
-        qp.process("Messi world cup", 1, 50);
+        qp.process("Messi world cup", 1, 10);
 
     }
 

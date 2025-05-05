@@ -5,6 +5,7 @@ import Utils.WebDocument;
 import dbManager.dbManager;
 import java.util.*;
 import java.util.regex.*;
+import java.util.stream.Stream;
 
 public class PhraseBasedRanker implements Ranker {
     private final double popularityAlpha;
@@ -23,7 +24,7 @@ public class PhraseBasedRanker implements Ranker {
 
     @Override
     public List<WebDocument> rank(List<String> queryTexts, List<String> tokensFirst, List<String> tokensSecond,
-                                  Set<String> candidateDocsIds, String logicalOperator, Integer page, Integer docsPerPage) {
+                                    Set<String> candidateDocsIds, String logicalOperator) {
         // sort return
         String firstPhrase = queryTexts.get(0).toLowerCase();
         String secondPhrase = logicalOperator.isEmpty() ? "" : queryTexts.get(1).toLowerCase();
@@ -31,7 +32,7 @@ public class PhraseBasedRanker implements Ranker {
         // First Filter Operators and Not existing
         Set<String> filteredCandidateIds = FilterCandidates(firstPhrase, logicalOperator, secondPhrase, candidateDocsIds);
 
-        Integer totalDocCount = db.getTotalDocCount();
+        int totalDocCount = db.getTotalDocCount();
         if (totalDocCount == 0) {
             return new ArrayList<>();
         }
@@ -81,14 +82,12 @@ public class PhraseBasedRanker implements Ranker {
         }
 
         // Calculate skip value for pagination (page is 1-based)
-        int skip = (page - 1) * docsPerPage;
+        //int skip = (page - 1) * docsPerPage;
 
         return docScores.entrySet().stream()
                 .sorted((a, b) -> Double.compare(b.getValue(), a.getValue()))
-                .skip(skip)
-                .limit(docsPerPage)
-                .map(entry -> filteredDocs.get(entry.getKey()))
-                .toList();
+                .map(entry -> filteredDocs.get(entry.getKey())).toList();
+
     }
 
     Set<String> FilterCandidates(String firstPhrase, String logicalOperator, String secondPhrase, Set<String> candidateDocsIds) {

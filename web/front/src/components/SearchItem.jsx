@@ -2,12 +2,21 @@ import React from "react";
 import { Search, ExternalLink } from "lucide-react";
 import { useSearchParams } from "react-router";
 
+
 function highlightMatch(text, query) {
   if (!query) return text;
 
-  const regex = new RegExp(`(${query})`, "gi");
-  const parts = text.split(regex);
+  // Remove special characters from query and split into individual words
+  const sanitizedQuery = query.replace(/[^a-zA-Z ]/g, "");
+  const queryWords = sanitizedQuery.split(" ").filter(word => word.trim().length > 0);
+  
+  // Create a regex pattern that matches any of the query words
+  const pattern = queryWords.map(word => `\\b${word}\\b`).join("|");
+  const regex = new RegExp(`(${pattern})`, "gi");
 
+  // Split the text by the regex and map each part
+  const parts = text.split(regex);
+  
   return parts.map((part, i) =>
     regex.test(part) ? <strong key={i}>{part}</strong> : part
   );
@@ -34,7 +43,7 @@ function SearchItem({ item }) {
 
       {/* Description */}
       <p className="text-sm text-gray-800">
-        {highlightMatch(item.description, query)}
+        {highlightMatch(item.snippet, query)}
       </p>
 
       {/* Additional links if available */}

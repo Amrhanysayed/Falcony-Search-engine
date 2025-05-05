@@ -2,6 +2,8 @@ package Utils;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -10,33 +12,39 @@ import java.util.regex.Pattern;
 public class SnippetGenerator {
 
     /**
-     * Extracts a relevant snippet from HTML content based on the query.
+     * Extracts a relevant snippet from HTML content based on the query,
+     * focusing only on text within <p> tags.
      *
      * @param content   HTML content to extract text from
      * @param query     Search query to find in the text
      * @param maxWords  Maximum number of words in the resulting snippet
-     * @return A snippet of text containing the query, or the beginning of the text if query not found
+     * @return A snippet of text containing the query, or the beginning of paragraph text if query not found
      */
     public static String getSnippet(String content, String query, int maxWords) {
-        // Parse HTML to plain text using Jsoup - make sure to remove all HTML elements
-        String plainText = htmlToText(content);
+        // Extract text only from <p> tags
+        String paragraphText = extractParagraphText(content);
 
-        // Count words in the plain text
-        String[] words = plainText.split("\\s+");
+        // If no paragraph text was found, fall back to original method
+        if (paragraphText.trim().isEmpty()) {
+            return truncateToWordLimit(htmlToText(content), maxWords);
+        }
 
-        // If the plain text has fewer words than maxWords, just return it
+        // Count words in the paragraph text
+        String[] words = paragraphText.split("\\s+");
+
+        // If the paragraph text has fewer words than maxWords, just return it
         if (words.length <= maxWords) {
-            return plainText;
+            return paragraphText;
         }
 
         // If query is empty or null, return the beginning of the text
         if (query == null || query.trim().isEmpty()) {
-            return truncateToWordLimit(plainText, maxWords);
+            return truncateToWordLimit(paragraphText, maxWords);
         }
 
         // Split query into words and find the best snippet containing most words
         String[] queryWords = query.toLowerCase().split("\\s+");
-        List<String> sentences = splitIntoSentences(plainText);
+        List<String> sentences = splitIntoSentences(paragraphText);
 
         // Find the sentence that contains the most query words
         int maxMatches = 0;
@@ -54,7 +62,7 @@ public class SnippetGenerator {
 
         // If no matches found, return the beginning of the text
         if (maxMatches == 0) {
-            return truncateToWordLimit(plainText, maxWords);
+            return truncateToWordLimit(paragraphText, maxWords);
         }
 
         // Build snippet around the best matching sentence
@@ -62,16 +70,33 @@ public class SnippetGenerator {
     }
 
     /**
-     * Converts HTML to plain text using Jsoup
-     * Ensures all HTML tags are completely removed
+     * Extracts text only from <p> tags in HTML content
+     */
+    private static String extractParagraphText(String html) {
+        try {
+            Document doc = Jsoup.parse(html);
+            Elements paragraphs = doc.select("p");
+
+            StringBuilder paragraphText = new StringBuilder();
+            for (Element paragraph : paragraphs) {
+                paragraphText.append(paragraph.text()).append(" ");
+            }
+
+            return paragraphText.toString().trim();
+        } catch (Exception e) {
+            // Fallback: If Jsoup parsing fails, manually strip tags (less ideal)
+            return html.replaceAll("<[^>]*>", "");
+        }
+    }
+
+    /**
+     * Converts HTML to plain text using Jsoup (used as fallback)
      */
     private static String htmlToText(String html) {
         try {
             Document doc = Jsoup.parse(html);
-            // Use text() method which extracts text from all elements, removing all HTML tags
             return doc.text();
         } catch (Exception e) {
-            // Fallback: If Jsoup parsing fails, manually strip tags (less ideal)
             return html.replaceAll("<[^>]*>", "");
         }
     }
@@ -116,7 +141,6 @@ public class SnippetGenerator {
     /**
      * Constructs a snippet centered around a specific sentence,
      * including context from surrounding sentences if possible
-     * Now limits by word count instead of character length
      */
     private static String constructSnippet(List<String> sentences, int centerIndex, int maxWords) {
         StringBuilder snippet = new StringBuilder(sentences.get(centerIndex));

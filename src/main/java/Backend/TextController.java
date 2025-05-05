@@ -1,5 +1,6 @@
 package Backend;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import javax.annotation.PostConstruct;
@@ -27,12 +28,13 @@ public class TextController {
     }
 
     @CrossOrigin(origins = "*")
-    @GetMapping("/search")
-    public List<WebDocument> handleQuery(@RequestParam(name = "query") String queryValue, @RequestParam(name = "limit") Integer limit, @RequestParam Integer page) throws Exception {
+    @GetMapping(value = "/search", produces = "application/json")
+    public ResultsResponse handleQuery(@RequestParam(name = "query") String queryValue, @RequestParam(name = "limit") Integer limit, @RequestParam Integer page) throws Exception {
         System.out.println("query: " + queryValue);
         System.out.println("limit: " + limit);
         System.out.println("page: " + page);
         return queryProcessor.process(queryValue, page, limit);
+
     }
     @CrossOrigin(origins = "*")
     @GetMapping("/suggestions")
