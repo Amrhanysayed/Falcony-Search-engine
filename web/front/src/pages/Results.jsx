@@ -48,7 +48,7 @@ const Results = () => {
     };
 
     fetchResults();
-  }, [query]);
+  }, [query, page]);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
