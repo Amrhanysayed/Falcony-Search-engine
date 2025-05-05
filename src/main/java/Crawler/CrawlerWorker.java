@@ -82,11 +82,23 @@ public class CrawlerWorker implements Runnable {
                 .maxBodySize(1_000_000) // 1MB
                 .get();
 
+        try {
+          String htmlLang = doc.selectFirst("html").attr("lang");
+          if (!htmlLang.toLowerCase().startsWith("en")) {
+            continue;
+          }
+
+        }catch (NullPointerException e ){
+           System.err.println("this not as an lang attr" + url);
+        }
+
         int currentCount = pageCount.incrementAndGet();
 
         // Extract page data
         String title = doc.title() != null && !doc.title().isEmpty() ? doc.title() : "Untitled";
         String content = doc.body() != null ? doc.body().html() : "";
+
+
 
 
         Elements links = doc.select("a[href]");
@@ -137,12 +149,13 @@ public class CrawlerWorker implements Runnable {
                 .append("content", content)
                 .append("timestamp", System.currentTimeMillis())
                 .append("indexed", false)
+                .append("images_indexed",false)
                 .append("links", linksText)
                 .append("images", imageUrls);
 
         try {
           // Add to queue with timeout to prevent blocking forever
-          if (!documentQueue.offer(bsonDoc, 15, TimeUnit.SECONDS)) {
+          if (!documentQueue.offer(bsonDoc, 5, TimeUnit.SECONDS)) {
             System.err.println("Failed to queue document: " + url + " - queue full");
           }else{
             System.out.println("sucess to add : " + url);
