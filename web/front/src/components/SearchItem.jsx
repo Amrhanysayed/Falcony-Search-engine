@@ -33,9 +33,9 @@ function SearchItem({ item }) {
       </a>
 
       {/* Description */}
-      <p className="text-sm text-gray-800">
+      {/* <p className="text-sm text-gray-800">
         {highlightMatch(item.description, query)}
-      </p>
+      </p> */}
 
       {/* Additional links if available */}
       {/* {item.sublinks && (
