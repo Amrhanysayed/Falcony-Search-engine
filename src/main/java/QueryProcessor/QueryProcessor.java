@@ -37,7 +37,7 @@ public class QueryProcessor {
         // Add the query to the database in a separate thread
         new Thread(() -> {
             try {
-                db.addQuery(finalQuery); // Add the query to the database
+                db.addQuery(finalQuery, normalizeQuery(finalQuery)); // Add the query to the database
                 System.out.println("Query added to the database: " + finalQuery);
             } catch (Exception e) {
                 System.out.println("eRROr");
@@ -136,7 +136,18 @@ public class QueryProcessor {
 
     }
     public List<String> getSuggestions(String query) throws Exception {
-       return db.getSuggestions(query, SUGGESTION_LIMIT);
+       return db.getSuggestions(query, normalizeQuery(query), SUGGESTION_LIMIT);
+    }
+
+    private String normalizeQuery(String query) {
+        if (query == null || query.trim().isEmpty()) {
+            return "";
+        }
+        // Remove punctuation, apostrophes, and extra spaces; convert to lowercase
+        return query.trim()
+                .toLowerCase()
+                .replaceAll("[^a-z0-9\\s]", "") // Remove all non-alphanumeric characters except spaces
+                .replaceAll("\\s+", " ");       // Replace multiple spaces with a single space
     }
 
     public static void main(String[] args) throws Exception {

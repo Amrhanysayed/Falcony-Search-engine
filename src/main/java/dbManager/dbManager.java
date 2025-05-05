@@ -1,20 +1,14 @@
 package dbManager;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Queue;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import com.mongodb.MongoException;
 import org.bson.Document;
 import org.bson.types.ObjectId;
-import org.springframework.data.mongodb.core.index.Index;
 
 import com.mongodb.ConnectionString;
 import com.mongodb.MongoBulkWriteException;
@@ -63,12 +57,9 @@ public class dbManager {
         imagesDatabase = imagesMongoClient.getDatabase(DB_NAME);
         imageCollection = imagesDatabase.getCollection("images");
 
-
-        queryCollection.createIndex(Indexes.ascending("_id")); // Already exists for _id
-        queryCollection.createIndex(Indexes.text("_id")); // For text search
-
         crawlerStateCollection= database.getCollection("crawler_state");
         System.out.println("Connected to MongoDB Atlas.");
+        addIndexes();
     }
 
     private MongoClientSettings getMongoClientSettings(String connectionString) {
@@ -86,6 +77,11 @@ public class dbManager {
 
     }
 
+    private void addIndexes() {
+        queryCollection.createIndex(Indexes.ascending("_id")); // Already exists for _id
+        queryCollection.createIndex(Indexes.text("_id")); // For text search
+        queryCollection.createIndex(Indexes.ascending("normalized"));
+    }
     // Insert a document
     // crawler
     ///  TODO: url, doc
@@ -539,24 +535,45 @@ public class dbManager {
     }
 
 
-    public void addQuery(String query){
-        UpdateOptions options = new UpdateOptions().upsert(true);
-
-         queryCollection.updateOne(
-            Filters.eq("_id", query),
-            Updates.inc("count", 1),
-            options
+    public void addQuery(String query, String normalizedQuery) {
+        if (query == null || query.trim().isEmpty()) {
+            return;
+        }
+        if (normalizedQuery.isEmpty()) {
+            return;
+        }
+        try {
+            UpdateOptions options = new UpdateOptions().upsert(true);
+            queryCollection.updateOne(
+                    Filters.eq("_id", query), // Use original query as _id
+                    new Document("$inc", new Document("count", 1))
+                            .append("$set", new Document("normalized", normalizedQuery)),
+                    options
             );
+        } catch (MongoException e) {
+            System.err.println("Error adding query: " + e.getMessage());
+        }
     }
-    
-    public List<String> getSuggestions(String prefix,int limit) {
-    return queryCollection.find(Filters.regex("_id", "^" + Pattern.quote(prefix), "i"))
-        .sort(Sorts.descending("count"))
-        .limit(limit)
-        .into(new ArrayList<>())
-        .stream()
-        .map(doc -> doc.getString("_id"))
-        .collect(Collectors.toList());
+
+    public List<String> getSuggestions(String prefix, String normalizedPrefix, int limit) {
+        if (prefix == null || prefix.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+        if (normalizedPrefix.isEmpty()) {
+            return Collections.emptyList();
+        }
+        try {
+            return queryCollection.find(Filters.regex("normalized", "^" + Pattern.quote(normalizedPrefix), "i"))
+                    .sort(Sorts.descending("count"))
+                    .limit(limit)
+                    .into(new ArrayList<>())
+                    .stream()
+                    .map(doc -> doc.getString("_id")) // Return original _id for display
+                    .collect(Collectors.toList());
+        } catch (MongoException e) {
+            System.err.println("Error fetching suggestions: " + e.getMessage());
+            return Collections.emptyList();
+        }
     }
 
     // Close the database connection
