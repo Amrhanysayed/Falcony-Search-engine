@@ -23,8 +23,10 @@ public class TextController {
 
     @CrossOrigin(origins = "*")
     @GetMapping("/search")
-    public List<WebDocument> handleQuery(@RequestParam(name = "query") String queryValue) throws Exception {
-        System.out.println(queryValue);
-        return queryProcessor.process(queryValue);
+    public List<WebDocument> handleQuery(@RequestParam(name = "query") String queryValue, @RequestParam(name = "limit") Integer limit, @RequestParam Integer page) throws Exception {
+        System.out.println("query: " + queryValue);
+        System.out.println("limit: " + limit);
+        System.out.println("page: " + page);
+        return queryProcessor.process(queryValue, page, limit);
     }
 }

@@ -22,7 +22,7 @@ public class QueryProcessor {
         tokenizer = new Tokenizer();
     }
 
-    public List<WebDocument> process(String query) throws Exception {
+    public List<WebDocument> process(String query, Integer page, Integer docsPerPage) throws Exception {
         query = query.trim().toLowerCase(); // ALL COMING LOGIC IS BASED ON LOWERCASE
         List<String> queryTexts = new ArrayList<>();
         Pattern pattern = Pattern.compile("\"([^\"]*)\"\\s*(AND|OR|NOT)\\s*\"([^\"]*)\"", Pattern.CASE_INSENSITIVE);
@@ -98,7 +98,7 @@ public class QueryProcessor {
         System.out.println("WILL RANK");
 
         double startTime = System.currentTimeMillis();
-        List<WebDocument> Results = rankerContext.rank(queryTexts , tokensFirst, tokensSecond, candidateDocIds, operator);
+        List<WebDocument> Results = rankerContext.rank(queryTexts , tokensFirst, tokensSecond, candidateDocIds, operator, page, docsPerPage);
         double endTime = System.currentTimeMillis();
         double duration = (endTime - startTime) / 1000;
         System.out.println("Anas Ranker took " + duration + " seconds");
@@ -125,7 +125,7 @@ public class QueryProcessor {
 
     public static void main(String[] args) throws Exception {
         QueryProcessor qp = new QueryProcessor();
-        qp.process("\"Autism\"");
+        qp.process("Messi world cup", 1, 500000);
 
     }
 

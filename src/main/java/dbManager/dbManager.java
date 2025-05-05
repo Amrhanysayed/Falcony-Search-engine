@@ -3,7 +3,9 @@ package dbManager;
 import Backend.Image;
 import Utils.Posting;
 import Utils.WebDocument;
+import com.mongodb.ConnectionString;
 import com.mongodb.MongoBulkWriteException;
+import com.mongodb.MongoClientSettings;
 import com.mongodb.bulk.BulkWriteError;
 import com.mongodb.client.*;
 import com.mongodb.client.model.*;
@@ -13,6 +15,7 @@ import org.bson.types.ObjectId;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -36,8 +39,12 @@ public class dbManager {
     private static final int BULK_WRITE_BATCH_SIZE = 1000;
 
     public dbManager() {
-        mongoClient = MongoClients.create(CONNECTION_STRING);
-        imagesMongoClient = MongoClients.create(IMAGES_CONNECTION_STRING);
+
+        mongoClient = MongoClients.create(getMongoClientSettings(CONNECTION_STRING));
+        MongoDatabase database = mongoClient.getDatabase("searchengine");
+
+        imagesMongoClient = MongoClients.create(getMongoClientSettings(IMAGES_CONNECTION_STRING));
+
         database = mongoClient.getDatabase(DB_NAME);
         docsCollections = database.getCollection(COLLECTION_NAME);
         tokensCollection = database.getCollection("tokens");  // Renamed for proper casing
@@ -48,6 +55,21 @@ public class dbManager {
 
         crawlerStateCollection= database.getCollection("crawler_state");
         System.out.println("Connected to MongoDB Atlas.");
+    }
+
+    private MongoClientSettings getMongoClientSettings(String connectionString) {
+        return MongoClientSettings.builder()
+                .applyConnectionString(new ConnectionString(connectionString))
+                .applyToConnectionPoolSettings(builder ->
+                        builder.maxSize(20)
+                                .minSize(5)
+                                .maxWaitTime(7000, TimeUnit.MILLISECONDS)
+                                .maxConnectionIdleTime(40000, TimeUnit.MILLISECONDS))
+                .applyToSocketSettings(builder ->
+                        builder.connectTimeout(10000, TimeUnit.MILLISECONDS)
+                                .readTimeout(40000, TimeUnit.MILLISECONDS))
+                .build();
+
     }
 
     // Insert a document

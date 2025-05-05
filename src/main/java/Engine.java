@@ -36,11 +36,11 @@ public class Engine {
 
         startTime = System.currentTimeMillis();
 
-        //PageRank.main(args);
+        PageRank.main(args);
 
         endTime = System.currentTimeMillis();
         duration = (endTime - startTime) / 1000;
-        System.out.println("Ranker took " + duration + " seconds");
+        System.out.println("Page Rank took " + duration + " seconds");
 
     }
 }
