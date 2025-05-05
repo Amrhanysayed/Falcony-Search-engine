@@ -9,6 +9,10 @@ import Settings from "../components/Settings";
 import { useSettings } from "../context/SettingsContext";
 import falcony_api from "../axiosInstance";
 import Loading from "../components/Loading";
+// import { Sidebar } from "lucide-react";
+
+import Sidebar from "../components/Sidebar";
+import ImageSearchResult from "../components/ImageSearchResult";
 
 const limit = 10;
 const Results = () => {
@@ -17,9 +21,10 @@ const Results = () => {
   const [timeTaken, setTimeTaken] = useState(0); // to be changed to the time taken for the results
   const query = searchParams.get("query");
 
+  const [status, setStatus] = useState("all");
+
   const { themeColor } = useSettings();
   const [loading, setloading] = useState(false);
-
 
   const [totalPages, setTotalPages] = useState(0); // to be changed to the total number of pages
 
@@ -34,7 +39,9 @@ const Results = () => {
       setTimeTaken(0);
       const startTime = Date.now(); // Start time
       try {
-        const response = await falcony_api.get(`/search?query=${query}&page=${page}&limit=${limit}`);
+        const response = await falcony_api.get(
+          `/search?query=${query}&page=${page}&limit=${limit}`
+        );
         console.log(response.data);
         setSearchResults(response.data);
         setTotalPages(Math.ceil(response.data.total / limit));
@@ -69,12 +76,18 @@ const Results = () => {
           <SearchUnit />
         </div>
 
+        <Sidebar status={status} setStatus={setStatus} />
+
         <div className=" flex flex-col mt-4 lg:px-[100px] gap-12">
           {loading ? (
             <Loading />
           ) : (
             <>
-              <SearchResults results={searchResults} timeTaken={timeTaken} />
+              {status === "all" ? (
+                <SearchResults results={searchResults} timeTaken={timeTaken} />
+              ) : (
+                <ImageSearchResult results={searchResults} />
+              )}
 
               <Pagination
                 page={page}
