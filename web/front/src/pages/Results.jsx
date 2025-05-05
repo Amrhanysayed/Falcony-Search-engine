@@ -13,8 +13,9 @@ import Loading from "../components/Loading";
 const Results = () => {
   const [searchParams] = useSearchParams();
   const [page, setPage] = useState(1); /// i will send the total number of pages to compoent
+  const [timeTaken, setTimeTaken] = useState(0); // to be changed to the time taken for the results
   const query = searchParams.get("query");
-  //console.log(query);
+
   const { themeColor } = useSettings();
   const [loading, setloading] = useState(false);
 
@@ -25,6 +26,8 @@ const Results = () => {
   useEffect(() => {
     const fetchResults = async () => {
       setloading(true);
+      setTimeTaken(0);
+      const startTime = Date.now(); // Start time
       try {
         const response = await falcony_api.get(`/search?query=${query}`);
         console.log(response.data);
@@ -33,6 +36,8 @@ const Results = () => {
         console.error("Error fetching search results:", error);
       } finally {
         setloading(false);
+        // Convert milliseconds to seconds
+        setTimeTaken((Date.now() - startTime) / 1000);
       }
     };
 
@@ -58,10 +63,20 @@ const Results = () => {
           <SearchUnit />
         </div>
 
-        <div className=" flex flex-col mt-4  gap-12">
-          {loading ? <Loading /> : <SearchResults results={searchResults} />}
+        <div className=" flex flex-col mt-4 lg:px-[100px] gap-12">
+          {loading ? (
+            <Loading />
+          ) : (
+            <>
+              <SearchResults results={searchResults} timeTaken={timeTaken} />
 
-          <Pagination page={page} setPage={setPage} totalPages={totalPages} />
+              <Pagination
+                page={page}
+                setPage={setPage}
+                totalPages={totalPages}
+              />
+            </>
+          )}
         </div>
       </div>
 
