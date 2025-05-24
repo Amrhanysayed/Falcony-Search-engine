@@ -1,7 +1,3 @@
-Here is a professional `README.md` file for your Java-based search engine project, **Falcony**:
-
----
-
 # 🦅 Falcony Search Engine
 
 Falcony is a multicomponent, AI-powered, Java-based search engine developed for the Advanced Programming Techniques course at Cairo University. It replicates the core functionality of modern search engines—crawling, indexing, ranking, and querying—with a focus on modular architecture, multithreaded performance, and modern web technologies.
