@@ -1,126 +1,143 @@
-# 🦅 Falcony Search Engine
+# Falcony Search Engine
 
-Falcony is a multicomponent, AI-powered, Java-based search engine developed for the Advanced Programming Techniques course at Cairo University. It replicates the core functionality of modern search engines—crawling, indexing, ranking, and querying—with a focus on modular architecture, multithreaded performance, and modern web technologies.
+## Features
+**The seed we started with is mostly football-related websites**
 
-## 🛠️ Technologies Used
+### 1. Text-Based Search
 
-* **Backend:**
+Falcony provides powerful text search capabilities with support for:
+- Standard keyword searching (e.g., "premier league standings")
+- Relevance-based result ranking
+- PageRank implementation for determining page importance
+- Search suggestions based on popular football queries
 
-  * Java 17
-  * Spring Boot
-* **Frontend:**
+<div style="display: flex; justify-content: space-around; align-items: center;">
+  <figure style="text-align: center;">
+    <h5>Landing Page</h5>
+    <img src="https://github.com/AmrSamy59/Search-Engine/blob/main/screenshots/0.png" alt="Image 1" height="400px" width="812px">
+  </figure>
+  <figure style="text-align: center;">
+    <h5>Suggestions</h5>
+    <img src="https://github.com/AmrSamy59/Search-Engine/blob/main/screenshots/1.png" alt="Image 1" height="400px" width="812px">
+  </figure>
+  <figure style="text-align: center;">
+    <h5>Text Search</h5>
+    <img src="https://github.com/AmrSamy59/Search-Engine/blob/main/screenshots/2.png" alt="Image 1" height="400px" width="812px">
+  </figure>
+</div>
 
-  * React.js
-  * JavaScript
-  * Tailwind CSS
-* **AI Integration:**
+### 2. Phrase Searching
+Search for exact phrases using quotation marks:
+- Example: `"Cristiano Ronaldo goals"`
+- Results will include only pages containing the exact phrase
 
-  * Image search using a deep learning model (e.g., feature vectors for visual similarity)
+<div style="display: flex; justify-content: space-around; align-items: center;">
+  <figure style="text-align: center;">
+    <h5>Phrase Searching</h5>
+    <img src="https://github.com/AmrSamy59/Search-Engine/blob/main/screenshots/3.png" alt="Image 1" height="400px" width="812px">
+  </figure>
+</div>
 
----
+### 3. Boolean Operators
+Combine phrases with logical operators for advanced searching:
+- AND: `"Lionel Messi" AND "Barcelona"`
+- OR: `"Premier League" OR "La Liga"`
+- NOT: `"Real Madrid" NOT "Champions League"`
 
-## 📦 Project Modules
+<div style="display: flex; justify-content: space-around; align-items: center;">
+  <figure style="text-align: center;">
+    <h5>Boolean Operators</h5>
+    <img src="https://github.com/AmrSamy59/Search-Engine/blob/main/screenshots/4.png" alt="Image 1" height="400px" width="812px">
+  </figure>
+</div>
 
-### 1. 🌐 Web Crawler
+### 4. Image Search
+Search by uploading an image to find visually similar football images:
+- Uses DinoV2 ONNX model for feature extraction
+- Vector similarity search for efficient image matching
+- Supports various image formats
 
-* Implements a **multithreaded worker pool architecture** with adjustable thread count.
-* Crawls **6000+ pages** (HTML, images, links) in **<10 minutes**.
-* Features:
+##### Image Searching
+![Video demo](https://github.com/AmrSamy59/Search-Engine/blob/main/screenshots/6.gif)
+<div style="display: flex; justify-content: space-around; align-items: center;">
+  <figure style="text-align: center;">    <img src="https://github.com/AmrSamy59/Search-Engine/blob/main/screenshots/5.png" alt="Image 1" height="400px" width="812px">
+  </figure>
+</div>
 
-  * URL normalization & compact string comparison
-  * Duplicate detection
-  * `robots.txt` compliance
-  * State persistence for resumable crawling
-  * Crawl priority queue (BFS-style)
+## Architecture
 
-### 2. 🗂️ Indexer
+### Backend Components
 
-* Parses HTML content and extracts terms with context (title, headers, body).
-* Builds an **inverted index** stored in a persistent database.
-* Supports:
+#### Crawler
+- Collects web pages and images from the internet
+- Respects robots.txt rules
+- Normalizes URLs to avoid duplicates
+- Stores documents in MongoDB
 
-  * Fast word-based queries
-  * Phrase queries with ordered word checks
-  * Incremental updates from newly crawled pages
+#### Indexers
+- **TextIndexer**: Processes web page content, tokenizes text, removes stop words, and creates an inverted index
+- **ImageIndexer**: Extracts image features using DinoV2 model and stores vector representations
 
-### 3. ⚖️ Ranker
+#### Query Processor
+- Handles user queries and routes to appropriate rankers
+- Supports suggestion generation for autocomplete
+- Handles pagination of results
 
-* Calculates:
+#### Rankers
+- **TokenBasedRanker**: Ranks results for keyword searches using TF-IDF and popularity
+- **PhraseBasedRanker**: Specialized ranking for phrase searches with boolean operators
 
-  * **Relevance**: using TF-IDF, location-based weighting (title, heading, body)
-  * **Popularity**: via the **PageRank** algorithm
-* Combines relevance and popularity to deliver ranked results
+#### Database Management
+- Uses MongoDB for document and image storage
+- Separate collections for documents, tokens, images, and queries
+- Vector search capabilities using MongoDB Atlas
 
-### 4. 🔌 Backend (Spring Boot)
+### Frontend Components
+- React-based user interface
+- Real-time search suggestions
+- Responsive design for various devices
+- Support for both text and image search interfaces
 
-* RESTful APIs to:
+## Technology Stack
 
-  * Process search queries
-  * Serve ranked results with snippets
-  * Handle image search with AI
-  * Serve autocomplete suggestions (based on query history)
-* Tracks and logs response time for performance monitoring
+- **Backend**: Java
+- **Frontend**: React, TailwindCSS
+- **Database**: MongoDB
+- **Machine Learning**: ONNX Runtime, DinoV2 model
+- **Text Processing**: OpenNLP TokenizerME, Porter Stemmer
+- **Web Crawling**: JSoup
+- **Build Tool**: Gradle
 
-### 5. 💻 Frontend (React.js + Tailwind CSS)
+## How It Works
 
-* Google-style UI with:
+### Text Search Flow
+1. User inputs a query like "Champions League final highlights"
+2. Query processor analyzes the query to determine if it's a keyword search, phrase search, or boolean search
+3. Tokenization and stemming are applied to the query
+4. Candidate documents are retrieved from the inverted index
+5. Results are ranked based on term frequency, document popularity (PageRank), and other relevance factors
+6. Snippets are generated highlighting query terms in context
+7. Results are returned to the user interface
 
-  * Search bar
-  * Autocomplete suggestion dropdown
-  * Paginated results
-  * Snippets with bolded keywords
-  * Image search tab
-  * Live query time indicator
+### Image Search Flow
+1. User uploads an image of a football moment through the interface
+2. Image features are extracted using the DinoV2 ONNX model
+3. The feature vector is compared against the database of indexed images using vector similarity
+4. Similar football images are ranked by cosine similarity
+5. Results are returned to the user interface with source documents
 
----
+### Indexing Process
+1. Crawler collects web pages and their images from seed URLs
+2. TextIndexer processes textual content:
+   - Tokenization and stemming
+   - Removal of stop words
+   - Creation of inverted index with position information
+3. ImageIndexer processes images:
+   - Feature extraction with DinoV2
+   - Vector normalization
+   - Storage in MongoDB with vector indexing
 
-## 🤖 AI-Powered Image Search
-
-Falcony includes a deep learning-based image search functionality. Features:
-
-* Converts user-uploaded image into a **feature vector**
-* Compares against indexed images using **cosine similarity**
-* Returns visually similar images ranked by similarity score
-
----
-
-## 🚀 Getting Started
-
-### 📦 Prerequisites
-
-* Java 17+
-* Node.js & npm
-* Spring Boot
-* MongoDB / PostgreSQL (for index persistence)
-
-### 🔧 Setup
-
-1. **Clone the Repository**
-
-```bash
-git clone https://github.com/yourusername/falcony-search-engine.git
-cd falcony-search-engine
-```
-
-2. **Backend**
-
-```bash
-cd backend
-./mvnw spring-boot:run
-```
-
-3. **Frontend**
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
----
-
-## 📃 License
-
-This project is licensed for educational purposes only. Do not redistribute without proper attribution.
-
----
+### PageRank Implementation
+- Graph representation of web pages and their links
+- Iterative calculation of importance scores
+- Integration of scores into the document ranking process
